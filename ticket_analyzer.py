@@ -4,6 +4,16 @@ import json
 import logging
 from collections import defaultdict
 from dotenv import load_dotenv
+from constants import (
+    OPENAI_CLUSTERING_FORMAT, 
+    OPENAI_QUERY_FORMAT,
+    OPENAI_MODEL,
+    OPENAI_TEMPERATURE,
+    OPENAI_MAX_TOKENS_CLUSTERING,
+    OPENAI_MAX_TOKENS_QUERY,
+    MIN_TICKETS_FOR_GROUP,
+    SYSTEM_MESSAGE
+)
 load_dotenv()
 
 # Configure logging
@@ -51,11 +61,47 @@ def analyze_similar_tickets(tickets):
     # Method 5: Use two-stage approach: first classify issues, then cluster
     # return two_stage_clustering(tickets)
 
+def parse_openai_response(response_text, expected_type="unknown"):
+    """
+    Parse OpenAI response with unified error handling and logging.
+    Returns (parsed_data, success) tuple.
+    """
+    try:
+        # Remove markdown/code block if present
+        cleaned = response_text.strip()
+        if cleaned.startswith("```"):
+            # Remove all leading/trailing backticks and whitespace
+            cleaned = cleaned.strip('`').strip()
+            # Remove language identifier if present
+            if cleaned.lower().startswith("json"):
+                cleaned = cleaned[4:].lstrip('\n').lstrip()
+        
+        logger.info(f"Cleaned OpenAI response for JSON parsing: {cleaned[:200]}...")
+        parsed = json.loads(cleaned)
+        logger.info(f"Successfully parsed {expected_type} response")
+        return parsed, True
+    except Exception as e:
+        logger.error(f"Failed to parse OpenAI response as JSON: {e}")
+        logger.error(f"Raw response: {response_text[:200]}...")
+        return None, False
+
 def cluster_with_openai(tickets):
     """Group tickets by similarity using OpenAI's completion API"""
     # Prepare ticket data for analysis
-    ticket_texts = [f"Ticket #{t['id']}: Subject: {t['subject']}, Description: {t['description']}" 
-                   for t in tickets]
+    ticket_texts = [
+        f"Ticket #{t['id']}: Subject: {t['subject']}, Description: {t['description']}, "
+        f"Internal Chart/Tool: {t.get('internal_chart_tool', '')}, "
+        f"Internal Chart/Tool - AI tagged: {t.get('internal_chart_tool_ai_tagged', '')}, "
+        f"Internal Chart/Tool - AI generated: {t.get('internal_chart_tool_ai_generated', '')}, "
+        f"Steps to reproduce: {t.get('steps_to_reproduce', '')}, "
+        f"Request Type - AI tagged: {t.get('request_type_ai_tagged', '')}, "
+        f"Request Type - CNIL: {t.get('request_type_cnil', '')}, "
+        f"Requester Type: {t.get('requester_type', '')}, "
+        f"JIRA ID: {t.get('jira_id', '')}, "
+        f"JIRA Ticket ID: {t.get('jira_ticket_id', '')}, "
+        f"Link to Discourse: {t.get('link_to_discourse', '')}"
+        for t in tickets
+    ]
     
     logger.info(f"Prepared {len(ticket_texts)} ticket texts for OpenAI analysis")
     
@@ -64,13 +110,14 @@ def cluster_with_openai(tickets):
     I have a set of technical support tickets. 
     
     Please analyze them and identify groups of tickets that are about the same or very similar issues.
-    For each group, provide:
-    1. A descriptive name for the common issue
-    2. The ticket IDs that belong to this group (numeric IDs only, without the # prefix)
     
-    Only create groups that genuinely represent the same underlying issue. If a ticket doesn't clearly belong to a group, leave it ungrouped.
-    Return the response as a JSON array, where each item has "issue_type" and "ticket_ids" fields.
-    IMPORTANT: ticket_ids must be strings containing ONLY the numeric ID without any prefix or suffix.
+    Return your response as a JSON object with this exact structure:
+    {OPENAI_CLUSTERING_FORMAT.format(total_tickets=len(tickets))}
+    
+    IMPORTANT: 
+    - Only create groups with {MIN_TICKETS_FOR_GROUP}+ tickets that genuinely represent the same underlying issue
+    - ticket_ids must be strings containing ONLY the numeric ID without any prefix or suffix
+    - Update groups_found to the actual number of groups returned
     
     Here are the tickets:
     {ticket_texts}
@@ -78,104 +125,134 @@ def cluster_with_openai(tickets):
     
     if not openai_api_key:
         logger.error("OpenAI API key not found. Set the OPENAI_API_KEY environment variable.")
-        # For testing without API key, return mock data for the login issues
-        if any("login" in t['subject'].lower() for t in tickets):
-            logger.info("Returning mock data for login issues (testing only)")
-            login_tickets = [t for t in tickets if "login" in t['subject'].lower() or "login" in t['description'].lower()]
-            if len(login_tickets) >= 5:
-                return [{
-                    'issue_type': 'Login Authentication Failures',
-                    'tickets': login_tickets
-                }]
         return []
     
     try:
-        logger.info("Calling OpenAI API for ticket analysis")
+        logger.info("Calling OpenAI API for ticket clustering")
         response = client.chat.completions.create(
-            model="gpt-4.1-2025-04-14",
+            model=OPENAI_MODEL,
             messages=[
-                {"role": "system", "content": "You are a technical support analyst who specializes in identifying patterns in customer support tickets."},
+                {"role": "system", "content": SYSTEM_MESSAGE},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.2,
-            max_tokens=2000
+            temperature=OPENAI_TEMPERATURE,
+            max_tokens=OPENAI_MAX_TOKENS_CLUSTERING
         )
         
-        # Extract the groups from the OpenAI response
         result = response.choices[0].message.content
         logger.info("Received response from OpenAI")
-        logger.debug(f"OpenAI response: {result}")
         
-        # Process the result to extract groups
-        try:
-            # Clean the response - sometimes OpenAI returns JSON in markdown code blocks
-            cleaned_result = result.strip()
-            
-            # Check if the response is wrapped in markdown code blocks
-            if cleaned_result.startswith("```") and cleaned_result.endswith("```"):
-                # Remove the triple backticks at beginning and end
-                cleaned_result = cleaned_result[3:]
-                cleaned_result = cleaned_result[:-3]
-                
-                # Remove potential language identifier (e.g., "json")
-                if cleaned_result.startswith("json\n") or cleaned_result.startswith("json\r\n"):
-                    cleaned_result = cleaned_result[4:].lstrip()
-            
-            # Additional cleaning for any lingering markdown or whitespace
-            cleaned_result = cleaned_result.strip()
-            
-            logger.info(f"Attempting to parse JSON from cleaned result")
-            try:
-                groups_data = json.loads(cleaned_result)
-                logger.info(f"Successfully parsed JSON response with {len(groups_data)} groups")
-            except json.JSONDecodeError as e:
-                # If we can't parse the cleaned result, try to extract JSON using regex
-                logger.warning(f"First JSON parse attempt failed: {e}")
-                logger.info("Attempting to extract JSON with regex")
-                
-                import re
-                json_match = re.search(r'\[\s*\{.*\}\s*\]', cleaned_result, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(0)
-                    logger.info(f"Found JSON-like string with regex")
-                    groups_data = json.loads(json_str)
-                    logger.info(f"Successfully parsed JSON from regex match")
-                else:
-                    raise ValueError("Could not find JSON array in response")
-            
-            # Convert the groups into our expected format
-            similar_groups = []
-            for i, group in enumerate(groups_data):
-                ticket_ids = group.get('ticket_ids', [])
-                logger.info(f"Group {i+1}: '{group['issue_type']}' with {len(ticket_ids)} tickets")
-                
-                # Find matching tickets
-                matching_tickets = []
-                for t in tickets:
-                    # Check both with and without the "#" prefix
-                    if str(t['id']) in ticket_ids or f"#{t['id']}" in ticket_ids:
-                        matching_tickets.append(t)
-                
-                if len(matching_tickets) >= 5:
-                    ticket_group = {
-                        'issue_type': group['issue_type'],
-                        'tickets': matching_tickets
-                    }
-                    similar_groups.append(ticket_group)
-                    logger.info(f"Added group '{group['issue_type']}' with {len(matching_tickets)} tickets")
-                else:
-                    logger.info(f"Skipping group '{group['issue_type']}' as it has fewer than 5 tickets")
-            
-            return similar_groups
-            
-        except json.JSONDecodeError:
-            logger.error("Failed to parse OpenAI response as JSON")
-            logger.error(f"Raw response: {result}")
+        # Parse using unified parser
+        parsed_data, success = parse_openai_response(result, "clustering")
+        if not success:
             return []
+        
+        # Extract groups and convert to legacy format
+        groups = parsed_data.get("data", {}).get("groups", [])
+        similar_groups = []
+        
+        for group in groups:
+            ticket_ids = group.get('ticket_ids', [])
+            logger.info(f"Processing group '{group.get('issue_type')}' with {len(ticket_ids)} tickets")
             
+            # Find matching tickets
+            matching_tickets = []
+            for t in tickets:
+                if str(t['id']) in ticket_ids:
+                    matching_tickets.append(t)
+            
+            if len(matching_tickets) >= MIN_TICKETS_FOR_GROUP:
+                ticket_group = {
+                    'issue_type': group.get('issue_type'),
+                    'tickets': matching_tickets
+                }
+                similar_groups.append(ticket_group)
+                logger.info(f"Added group '{group.get('issue_type')}' with {len(matching_tickets)} tickets")
+            else:
+                logger.info(f"Skipping group '{group.get('issue_type')}' as it has fewer than {MIN_TICKETS_FOR_GROUP} tickets")
+        
+        return similar_groups
+        
     except Exception as e:
         logger.error(f"Error using OpenAI API: {e}")
         return []
+
+def analyze_tickets_with_query(tickets, query):
+    """
+    Analyze tickets with a custom query using OpenAI.
+    Returns a tuple: (parsed_data, slack_summary)
+    """
+    if not tickets:
+        logger.info("No tickets provided for analysis with query")
+        return None, "No tickets to analyze."
+    if not query:
+        logger.info("No query provided for analysis.")
+        return None, "No query provided."
+    logger.info(f"Analyzing {len(tickets)} tickets with custom query: {query}")
+
+    ticket_texts = [
+        f"Ticket #{t['id']}: Subject: {t['subject']}, Description: {t['description']}, "
+        f"Internal Chart/Tool: {t.get('internal_chart_tool', '')}, "
+        f"Internal Chart/Tool - AI tagged: {t.get('internal_chart_tool_ai_tagged', '')}, "
+        f"Internal Chart/Tool - AI generated: {t.get('internal_chart_tool_ai_generated', '')}, "
+        f"Steps to reproduce: {t.get('steps_to_reproduce', '')}, "
+        f"Request Type - AI tagged: {t.get('request_type_ai_tagged', '')}, "
+        f"Request Type - CNIL: {t.get('request_type_cnil', '')}, "
+        f"Requester Type: {t.get('requester_type', '')}, "
+        f"JIRA ID: {t.get('jira_id', '')}, "
+        f"JIRA Ticket ID: {t.get('jira_ticket_id', '')}, "
+        f"Link to Discourse: {t.get('link_to_discourse', '')}"
+        for t in tickets
+    ]
+    
+    prompt = f"""
+    You are a technical support analyst. Here is a list of support tickets:
+    {ticket_texts}
+
+    Please answer the following question based on the tickets above:
+    {query}
+
+    Return your response as a JSON object with this exact structure:
+    {OPENAI_QUERY_FORMAT.format(total_tickets=len(tickets), query=query)}
+    
+    IMPORTANT: 
+    - Include relevant tickets in the tickets array
+    - Update count to reflect the actual number of relevant tickets
+    - Make summary concise but informative
+    """
+    
+    if not openai_api_key:
+        logger.error("OpenAI API key not found.")
+        return None, "OpenAI API key not configured."
+    
+    try:
+        logger.info("Calling OpenAI API for custom query analysis")
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_MESSAGE},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=OPENAI_TEMPERATURE,
+            max_tokens=OPENAI_MAX_TOKENS_QUERY
+        )
+        
+        result = response.choices[0].message.content.strip()
+        logger.info("Received response from OpenAI for custom query")
+        
+        # Parse using unified parser
+        parsed_data, success = parse_openai_response(result, "query")
+        if not success:
+            return None, result
+        
+        summary = parsed_data.get("summary", "No summary available")
+        logger.info(f"Parsed query response successfully. Summary: {summary}")
+        
+        return parsed_data, summary
+        
+    except Exception as e:
+        logger.error(f"Error using OpenAI API for custom query: {e}")
+        return None, f"Error analyzing tickets: {e}"
 
 # Alternative methods (for demonstration - not fully implemented)
 

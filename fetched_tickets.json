@@ -20,6 +20,16 @@
     "product": "Unknown"
   },
   {
+    "id": 359452,
+    "subject": "Page view journey",
+    "description": "How can I see what all the users did after coming to my website, the journey map is giving me duplicate records.",
+    "created_at": "2025-07-07T06:22:49Z",
+    "status": "open",
+    "priority": "normal",
+    "customer_id": "17361125536667",
+    "product": "Unknown"
+  },
+  {
     "id": 359457,
     "subject": "Web Experiment (linkage of Homepage to Sale Page)",
     "description": "i've implemented web experiment as such: https://app.amplitude.com/experiment/hipvan/614233/config/503595/activity\r\n\r\nour intention is to have a Home Page banner (Control), which will link to a Sale Page (Control) AND a Home Page banner (variant), which will link to a Sale Page (variant).\r\n\r\nwe've implemented pages selection as such:\r\nDefault Page View\r\n=\r\nURL matches regex\r\n\\/([#?].+|[#?]?$)|\\/great\r\n-singapore-sale-2025.*\r\n\r\nhowever, when i'm testing Homepage Variant & clicking through, it links to a Control Impression. however, if i apply \"?gss-homepage-landing-page=treatment&PREVIEW=true\" on the back of the sale page URL, it will work (ie. https://www.hipvan.com/great-singapore-sale-2025?gss-homepage-landing-page=treatment&PREVIEW=true).\r\n\r\ncan you help me out please? or direct me towards an article that is helpful.",
@@ -150,6 +160,26 @@
     "product": "Unknown"
   },
   {
+    "id": 359495,
+    "subject": "Bug in previous period comparison",
+    "description": "Hi there!\r\nI wanted to see these figures as 'view as % difference' but the variation I get does not match what I see get in the absolute numbers -the variation should be less and not in a negative trend-Could you please take a look?",
+    "created_at": "2025-07-07T11:42:42Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "10079969363483",
+    "product": "Unknown"
+  },
+  {
+    "id": 359498,
+    "subject": "Re: [Amplitude] Request Received - Help is on the way!",
+    "description": "This is a follow-up to your previous request #348298 \"changing product URL\"\n\nHi there, \n\nSince we rebranded, our email associated with our Amplitude account was deactivated and now I am not able to log into the Amplitude dashboard. Could you please provide some next steps and assistance? Thanks so much. \n\nCathy",
+    "created_at": "2025-07-07T12:04:05Z",
+    "status": "open",
+    "priority": "normal",
+    "customer_id": "38701203208219",
+    "product": "Unknown"
+  },
+  {
     "id": 359428,
     "subject": "Issue with Guides and Surveys functionality.",
     "description": "Guides and Surveys\u6a5f\u80fd\u306b\u95a2\u3057\u3066\u78ba\u8a8d\u3055\u305b\u3066\u304f\u3060\u3055\u3044\u3002\n\n**\u25bc\u3054\u8cea\u554f\u4e8b\u9805\u25bc**\nLimits\u3092\u6307\u5b9a\u3057\u305f\u72b6\u614b\u3067Guide\u3092\u516c\u958b\u3057\u305f\u5f8c\u306b\u3001\u305d\u306eGuides\u306eTargeting\u3092\u7de8\u96c6\u3057\u305f\u5834\u5408\u3001Limits\u306e\u30ab\u30a6\u30f3\u30c8\u306f\u30ea\u30bb\u30c3\u30c8\u3055\u308c\u308b\u3067\u3057\u3087\u3046\u304b\uff1f\n\uff08\u4e00\u5ea6Guide\u304c\u8868\u793a\u3055\u308c\u305f\u30e6\u30fc\u30b6\u30fc\u304c\u3044\u305f\u3068\u3057\u3066\u3001\u305d\u306eGuide\u306eTargeting\u306a\u3069\u306e\u6761\u4ef6\u3092\u7de8\u96c6\u3059\u308b\u3068\u3001Targeting\u306b\u542b\u307e\u308c\u3066\u3044\u308c\u3070\u307e\u305f\u8868\u793a\u3055\u308c\u307e\u3059\u304b\uff1f\uff09\n\n\u305d\u308c\u3068\u3082Targeting\u304c\u7de8\u96c6\u3055\u308c\u3066\u3082\u95a2\u4fc2\u306a\u304f\u3001\u30e6\u30fc\u30b6\u30fc\u3054\u3068\u306b\u8868\u793a\u30ab\u30a6\u30f3\u30c8\u306e\u3088\u3046\u306a\u3082\u306e\u3092\u4fdd\u6301\u3057\u3066\u3044\u308b\u306e\u3067\u3057\u3087\u3046\u304b\uff1f\uff08\u3064\u307e\u308a\u4e00\u5ea6\u8868\u793a\u3055\u308c\u305f\u30e6\u30fc\u30b6\u30fc\u306f\u8868\u793a\u3055\u308c\u306a\u3044\uff1f\uff09\n\n\u3054\u78ba\u8a8d\u306e\u307b\u3069\u3088\u308d\u3057\u304f\u304a\u9858\u3044\u3044\u305f\u3057\u307e\u3059\u3002\n\n\u2022 \u5bfe\u8c61org\n \u25e6 \u7d44\u7e54\uff1aGLOBIS\n \u25e6 \u7d44\u7e54 ID\uff1a92108\n \u25e6 \u7d44\u7e54URL\uff1ahodai\n\n------------------------------------------------\n**AI Generated Summary**\nThe customer is experiencing text duplication issue in Guides and Surveys functionality.\n---\n\n\n> Ticket created from this message in **#camp_faq** via Thena",
@@ -220,16 +250,6 @@
     "product": "Unknown"
   },
   {
-    "id": 359452,
-    "subject": "Page view journey",
-    "description": "How can I see what all the users did after coming to my website, the journey map is giving me duplicate records.",
-    "created_at": "2025-07-07T06:22:49Z",
-    "status": "pending",
-    "priority": "normal",
-    "customer_id": "17361125536667",
-    "product": "Unknown"
-  },
-  {
     "id": 359455,
     "subject": "\ud83d\udc0c Reporting Slowness",
     "description": "Categories: [OTHER]. While on the \"home\", I clicked \"start tour\" and nothing happens",
@@ -254,7 +274,7 @@
     "subject": "Unable to log in through SSO",
     "description": "Hi,\n\nWe are unable to login SSO in our voicemod workspace\n\nCan you help?\n\nThanks!",
     "created_at": "2025-07-07T07:30:07Z",
-    "status": "pending",
+    "status": "solved",
     "priority": "high",
     "customer_id": "400382686791",
     "product": "Unknown"

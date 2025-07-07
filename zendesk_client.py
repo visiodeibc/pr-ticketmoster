@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from zenpy import Zenpy
 from zenpy.lib.api_objects import Ticket
 from dotenv import load_dotenv
+from constants import CUSTOM_FIELD_MAP, TICKET_FETCH_HOURS
 
 load_dotenv()
 
@@ -85,13 +86,13 @@ class ZendeskClient:
             return []
         
         try:
-            # Calculate 24 hours ago
+            # Calculate hours ago based on constant
             now = datetime.now(timezone.utc)
-            cutoff = now - timedelta(hours=24)
+            cutoff = now - timedelta(hours=TICKET_FETCH_HOURS)
             
             logger.info(f"Fetching tickets created after {cutoff.isoformat()}")
             
-            # Use Zendesk search API to get tickets from last 24 hours
+            # Use Zendesk search API to get tickets from last period
             # Format: created>YYYY-MM-DD type:ticket
             search_query = f"created>{cutoff.strftime('%Y-%m-%d')} type:ticket"
             
@@ -116,7 +117,7 @@ class ZendeskClient:
                         
                         logger.debug(f"Ticket #{ticket.id} created at {ticket_date.isoformat()}")
                         
-                        # Only include tickets from the last 24 hours
+                        # Only include tickets from the last period
                         if ticket_date >= cutoff:
                             ticket_data = self._convert_ticket_format(ticket)
                             tickets.append(ticket_data)
@@ -161,6 +162,17 @@ class ZendeskClient:
                 logger.warning(f"Could not convert created_at for ticket #{zendesk_ticket.id}: {e}")
                 created_at_iso = str(zendesk_ticket.created_at)
         
+        # Extract custom fields by ID
+        custom_field_map = CUSTOM_FIELD_MAP
+        custom_field_values = {v: None for v in custom_field_map.values()}
+        if hasattr(zendesk_ticket, 'custom_fields') and zendesk_ticket.custom_fields:
+            for field in zendesk_ticket.custom_fields:
+                if field['id'] in custom_field_map:
+                    key = custom_field_map[field['id']]
+                    custom_field_values[key] = field.get('value')
+        # Optionally log extracted custom fields
+        logger.debug(f"Extracted custom fields for ticket #{zendesk_ticket.id}: {custom_field_values}")
+        
         return {
             'id': zendesk_ticket.id,
             'subject': zendesk_ticket.subject or 'No subject',
@@ -169,7 +181,8 @@ class ZendeskClient:
             'status': zendesk_ticket.status,
             'priority': zendesk_ticket.priority,
             'customer_id': str(zendesk_ticket.requester_id) if zendesk_ticket.requester_id else None,
-            'product': self._extract_product_from_tags(zendesk_ticket.tags) if zendesk_ticket.tags else 'Unknown'
+            'product': self._extract_product_from_tags(zendesk_ticket.tags) if zendesk_ticket.tags else 'Unknown',
+            **custom_field_values
         }
     
     def _extract_product_from_tags(self, tags):
