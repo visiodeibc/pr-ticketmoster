@@ -270,6 +270,7 @@ def analyze_tickets_with_query_and_timeframe(tickets, query, custom_timeframe=No
       * Include detailed ticket objects in the "tickets" array
       * Also include ticket IDs in the "ticket_ids" array
     - Always update "count" to reflect the actual number of relevant tickets found
+    - In your summary, always use the ACTUAL COUNT of tickets found, not the threshold number ({LARGE_RESULT_THRESHOLD})
     - Make summary concise but informative
     - Consider the time window context in your analysis
 
