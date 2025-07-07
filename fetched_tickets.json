@@ -1,0 +1,362 @@
+[
+  {
+    "id": 359439,
+    "subject": "Re: [Amplitude] Re: Can't find user event",
+    "description": "This is a follow-up to your previous request #358032 \"Can't find user event\"\n\nHi B,\n\nSome follow-up questions:\n\nFor option 2, I'm a bit confused where specifically I need to go look to removing these un-used events. Should I go check this link (https://app.amplitude.com/data/streetcontxt/Street%20Contxt/events/main/latest?view=All&eventsTab=Events)?\n\nFor option 3, what's that cost-wise and what would be the new limit?\n\nBest,\n\n\nJohn Lugtu\n\nSenior Product Manager\n\n40 University Avenue, Suite 720\n\nToronto, ON M5J 1J9\n\n[cid:3696d345-f1d9-47df-82bd-1c20730bce82]\n\n________________________________\nFrom: Amplitude Support <support@amplitude.zendesk.com>\nSent: June 20, 2025 5:18 PM\nTo: John Lugtu <john.lugtu@streetcontxt.com>\nSubject: [Amplitude] Re: Can't find user event\n\n[EXTERNAL]",
+    "created_at": "2025-07-07T02:22:53Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "38158315428763",
+    "product": "Unknown"
+  },
+  {
+    "id": 359448,
+    "subject": "For snowflake to amplitude data ingestion, how do I backfill older updates?",
+    "description": "Hi,\n\nWhile working on using https://amplitude.com/docs/data/source-catalog/snowflake we realized we need to backfill events published in the past. The current process involves nuking all the old events and republish again. However this results in counting the same events multiple times and drastically increases our events quota usage.\n\n\n\nWhat is the simplest procedure to update past published events? This will be needed during development process + bug fixing on data in snowflake while reviewing in production.",
+    "created_at": "2025-07-07T05:51:32Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "32811852450587",
+    "product": "Unknown"
+  },
+  {
+    "id": 359457,
+    "subject": "Web Experiment (linkage of Homepage to Sale Page)",
+    "description": "i've implemented web experiment as such: https://app.amplitude.com/experiment/hipvan/614233/config/503595/activity\r\n\r\nour intention is to have a Home Page banner (Control), which will link to a Sale Page (Control) AND a Home Page banner (variant), which will link to a Sale Page (variant).\r\n\r\nwe've implemented pages selection as such:\r\nDefault Page View\r\n=\r\nURL matches regex\r\n\\/([#?].+|[#?]?$)|\\/great\r\n-singapore-sale-2025.*\r\n\r\nhowever, when i'm testing Homepage Variant & clicking through, it links to a Control Impression. however, if i apply \"?gss-homepage-landing-page=treatment&PREVIEW=true\" on the back of the sale page URL, it will work (ie. https://www.hipvan.com/great-singapore-sale-2025?gss-homepage-landing-page=treatment&PREVIEW=true).\r\n\r\ncan you help me out please? or direct me towards an article that is helpful.",
+    "created_at": "2025-07-07T07:18:11Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "38697411713179",
+    "product": "Unknown"
+  },
+  {
+    "id": 359423,
+    "subject": "Weird user re-mapping incident",
+    "description": "User 59113 got remapped to user 1135027, we don't know why and it looks like an issue because both users are active on Snoonu...",
+    "created_at": "2025-07-06T16:16:57Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "1267191028110",
+    "product": "Unknown"
+  },
+  {
+    "id": 359471,
+    "subject": "Re: Re: Pass Custom Properties in Initialization Tag",
+    "description": "This is a follow-up to your previous request #349840 \"Re: Pass Custom Properties in Initialization Tag\"\n\nHi,\n\nCan the Enrichment plugin be implemented with GTM? https://github.com/amplitude/Amplitude-TypeScript/blob/main/examples/plugins/page-view-tracking-enrichment/index.ts\n\nBest regards,\n\nAnna",
+    "created_at": "2025-07-07T08:07:17Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "32987298619291",
+    "product": "Unknown"
+  },
+  {
+    "id": 359477,
+    "subject": "Sample ratio mismatch troubleshooting",
+    "description": "Hello,\r\n\r\nFor an A/B test that we have just launched 3 days ago, I received a notification saying there is a sample ratio mismatch problem.\r\n\r\nWhile looking the documentation for troubleshooting:\r\nhttps://amplitude.com/docs/feature-experiment/troubleshooting/sample-ratio-mismatch\r\n\r\nThis reason looks very close to our case:\r\nSignificantly more users converted from Assignment to Exposure for one variant over another.\r\n\r\nIndeed, the Assignments between Control and Treatment look equal, however, the conversion rate from Assignment to Exposure for Control is 0.08% and for Treatment is 0.04%.\r\n\r\nThe documentation doesn't mention how to resolve the problem.\r\nCould you assist us in this case?\r\n\r\nThank you in advance",
+    "created_at": "2025-07-07T08:59:16Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "34665716184731",
+    "product": "Unknown"
+  },
+  {
+    "id": 359479,
+    "subject": "Video recoridngs for experiment",
+    "description": "Is it possible to set video recoridngs for a specific experiment? \r\nCurrently only Control has any recordings, and Variant has none. Is there anything I could have done to change this? ",
+    "created_at": "2025-07-07T09:10:06Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "27400909183771",
+    "product": "Unknown"
+  },
+  {
+    "id": 359484,
+    "subject": "Question on Qoutas",
+    "description": "I\u2019d like to inquire about our monthly quota for session replays, as we\u2019re looking to set this up.\r\n\r\nIt would be helpful to have a detailed breakdown of our current allocation across all amplitude features so we can ensure we\u2019re using it effectively.",
+    "created_at": "2025-07-07T09:33:57Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "28588069469211",
+    "product": "Unknown"
+  },
+  {
+    "id": 359485,
+    "subject": "Empty demo",
+    "description": "I am trying to follow the getting started courses, which often point to a demo with pre-existing data (https://analytics.amplitude.com/login/demo). I found two issues \r\nFirst, the link resolves to https://app.amplitude.com/login/demo which will not work in my case since I am in EU. Would be nice its fixed so it automatically redirects to https://app.eu.amplitude.com/analytics/demo/home\r\nSecond, even when I log into the EU version of the website, the demo appears empty. There is no data I can use to generate the charts explained in the courses. Am I doing something wrong? I tried inspecting the two AmpliFinancials and Amplitude Demo tabs but none had any data.",
+    "created_at": "2025-07-07T09:45:44Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "38697147295131",
+    "product": "Unknown"
+  },
+  {
+    "id": 359486,
+    "subject": "Request for Invoice Due to Overcharge",
+    "description": "Last month's charge exceeded our current plan.\nI would like to receive the invoice that explains this overcharge.\nIs there a way to check this on the Amplitude website?",
+    "created_at": "2025-07-07T09:54:30Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "388140466151",
+    "product": "Unknown"
+  },
+  {
+    "id": 359487,
+    "subject": "Array (Data)",
+    "description": "Hello, I am reaching out because we are currently running some tests alongside the implementation work being done by the PM/dev team, based on the new tracking plan.\r\n\r\nWe want to use an array called \u201cproducts\u201d in our \u201cview cart\u201d event to collect key information about the products in a user's cart.\r\n\r\nIn GTM, we are correctly sending the data as an array \u2013 the tag is firing properly \u2013 with the event name \u201cproductstest\u201d and the property name \u201carray_productsa\u201d.\r\n\r\nIn Amplitude, the data appears correctly in the event stream. I have followed the steps in the Amplitude documentation (adding the property to the tracking plan and changing its format from string \u2013 which is the default \u2013 to array) to try to split the data.\r\n\r\nHowever, when I create a graph (segmentation) to test that everything is working as expected, I see that Amplitude is still treating the data as a string and not as an array.\r\n\r\nHow can we properly \u201csplit\u201d this array property so that we can analyze each value individually?\r\n\r\nI already checked Amplitude documentation, I need support to solve my issue, please not a link to any documentation.\r\n\r\nPlease see screenshots : \r\n- result (chart)\r\n- expected result (from Amplitude documentation)\r\n- details about setup\r\n\r\nCan respond in French if possible if not english is fine.\r\n\r\nThanks\r\nTracy",
+    "created_at": "2025-07-07T10:01:01Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "37625759826459",
+    "product": "Unknown"
+  },
+  {
+    "id": 359489,
+    "subject": "S3\u3078\u306e\u30b3\u30db\u30fc\u30c8\u540c\u671f\u304c\u5931\u6557\u3059\u308b",
+    "description": "\u30b3\u30db\u30fc\u30c8\u30c7\u30fc\u30bf\u3092S3\u306b\u540c\u671f\u3057\u3088\u3046\u3068\u601d\u3063\u305f\u306e\u3067\u3059\u304c\u3001\u300c\u3053\u306e\u30b3\u30db\u30fc\u30c8\u306f\u3001\u30af\u30a8\u30ea \u30b7\u30b9\u30c6\u30e0\u3067\u3042\u308b Nova \u306e\u5185\u90e8\u306e\u554f\u984c\u306b\u3088\u308a\u3001\u540c\u671f\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002\u73fe\u6642\u70b9\u3067\u306f\u904e\u8ca0\u8377\u306b\u306a\u3063\u3066\u3044\u308b\u53ef\u80fd\u6027\u304c\u3042\u308a\u307e\u3059\u3002\u30b3\u30db\u30fc\u30c8 \u30af\u30a8\u30ea\u306f\u30b3\u30b9\u30c8\u304c\u304b\u304b\u308b\u5834\u5408\u304c\u3042\u308a\u307e\u3059\u3002\u6570\u5206\u5f85\u3063\u3066\u304b\u3089\u3001\u3082\u3046\u4e00\u5ea6\u540c\u671f\u3057\u3066\u307f\u3066\u304f\u3060\u3055\u3044\u3002\u300d\u3068\u51fa\u3066\u5931\u6557\u3057\u307e\u3059\u3002\r\n\r\n\u6642\u9593\u3092\u7f6e\u3044\u3066\u518d\u5b9f\u884c\u3057\u305f\u306e\u3067\u3059\u304c\u3001\u6210\u529f\u3057\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u3069\u3046\u3059\u308c\u3070\u3088\u3044\u3067\u3057\u3087\u3046\u304b\u3002\u3054\u78ba\u8a8d\u3044\u305f\u3060\u3051\u307e\u3059\u3068\u5e78\u3044\u3067\u3059\u3002",
+    "created_at": "2025-07-07T10:04:30Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "37390563622427",
+    "product": "Unknown"
+  },
+  {
+    "id": 359491,
+    "subject": "Problem with adding new users",
+    "description": "Hi. I've invited new users as viewers, but they can't get past the SSO. Please help figure out, what is going wrong. See files attached.",
+    "created_at": "2025-07-07T10:10:23Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "38699269841435",
+    "product": "Unknown"
+  },
+  {
+    "id": 359492,
+    "subject": "I still have access to the platform ",
+    "description": "Hello Team, this customer churned recently and mentioned that they still have access to their platform\n\n61142,\n\n\n\nCan you please desactivate their account? thanks. Here is the SF account https://amplitude.lightning.force.com/lightning/r/Account/0010a00001cNphmAAC/view",
+    "created_at": "2025-07-07T10:24:18Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "14011885266971",
+    "product": "Unknown"
+  },
+  {
+    "id": 359493,
+    "subject": "Events quota",
+    "description": "We have reached the 2000 event property quota. We have blocked unused properties, but our quota usage is still 2000/2000. We want to free up quota without deleting historical data. Can you help us unregister the blocked properties from our schema?",
+    "created_at": "2025-07-07T10:36:28Z",
+    "status": "new",
+    "priority": "normal",
+    "customer_id": "38699609257883",
+    "product": "Unknown"
+  },
+  {
+    "id": 359428,
+    "subject": "Issue with Guides and Surveys functionality.",
+    "description": "Guides and Surveys\u6a5f\u80fd\u306b\u95a2\u3057\u3066\u78ba\u8a8d\u3055\u305b\u3066\u304f\u3060\u3055\u3044\u3002\n\n**\u25bc\u3054\u8cea\u554f\u4e8b\u9805\u25bc**\nLimits\u3092\u6307\u5b9a\u3057\u305f\u72b6\u614b\u3067Guide\u3092\u516c\u958b\u3057\u305f\u5f8c\u306b\u3001\u305d\u306eGuides\u306eTargeting\u3092\u7de8\u96c6\u3057\u305f\u5834\u5408\u3001Limits\u306e\u30ab\u30a6\u30f3\u30c8\u306f\u30ea\u30bb\u30c3\u30c8\u3055\u308c\u308b\u3067\u3057\u3087\u3046\u304b\uff1f\n\uff08\u4e00\u5ea6Guide\u304c\u8868\u793a\u3055\u308c\u305f\u30e6\u30fc\u30b6\u30fc\u304c\u3044\u305f\u3068\u3057\u3066\u3001\u305d\u306eGuide\u306eTargeting\u306a\u3069\u306e\u6761\u4ef6\u3092\u7de8\u96c6\u3059\u308b\u3068\u3001Targeting\u306b\u542b\u307e\u308c\u3066\u3044\u308c\u3070\u307e\u305f\u8868\u793a\u3055\u308c\u307e\u3059\u304b\uff1f\uff09\n\n\u305d\u308c\u3068\u3082Targeting\u304c\u7de8\u96c6\u3055\u308c\u3066\u3082\u95a2\u4fc2\u306a\u304f\u3001\u30e6\u30fc\u30b6\u30fc\u3054\u3068\u306b\u8868\u793a\u30ab\u30a6\u30f3\u30c8\u306e\u3088\u3046\u306a\u3082\u306e\u3092\u4fdd\u6301\u3057\u3066\u3044\u308b\u306e\u3067\u3057\u3087\u3046\u304b\uff1f\uff08\u3064\u307e\u308a\u4e00\u5ea6\u8868\u793a\u3055\u308c\u305f\u30e6\u30fc\u30b6\u30fc\u306f\u8868\u793a\u3055\u308c\u306a\u3044\uff1f\uff09\n\n\u3054\u78ba\u8a8d\u306e\u307b\u3069\u3088\u308d\u3057\u304f\u304a\u9858\u3044\u3044\u305f\u3057\u307e\u3059\u3002\n\n\u2022 \u5bfe\u8c61org\n \u25e6 \u7d44\u7e54\uff1aGLOBIS\n \u25e6 \u7d44\u7e54 ID\uff1a92108\n \u25e6 \u7d44\u7e54URL\uff1ahodai\n\n------------------------------------------------\n**AI Generated Summary**\nThe customer is experiencing text duplication issue in Guides and Surveys functionality.\n---\n\n\n> Ticket created from this message in **#camp_faq** via Thena",
+    "created_at": "2025-07-07T00:43:19Z",
+    "status": "pending",
+    "priority": "normal",
+    "customer_id": "20838698920091",
+    "product": "Unknown"
+  },
+  {
+    "id": 359430,
+    "subject": "Request for Guides and Surveys functionality.",
+    "description": "Guides and Surveys\u6a5f\u80fd\u306b\u95a2\u3057\u3066\u78ba\u8a8d\u3055\u305b\u3066\u304f\u3060\u3055\u3044\u3002\n\n**\u25bc\u3054\u8cea\u554f\u4e8b\u9805\u25bc**\n\u3042\u308b\u7279\u5b9a\u306e\u30da\u30fc\u30b8\u306b2\u3064\u306e\u30ac\u30a4\u30c9\u304c\u8a2d\u5b9a\u3055\u308c\u3066\u3044\u308b\u5834\u5408\u306b\u3001\u540c\u3058\u30bb\u30c3\u30b7\u30e7\u30f3\u5185\u3067\u9023\u7d9a\u8868\u793a\u3055\u308c\u306a\u3044\u3088\u3046\u306b\u5236\u5fa1\u3059\u308b\u3053\u3068\u306f\u53ef\u80fd\u3067\u3059\u304b\uff1f\n\u540c\u6642\u306b\u4e8c\u3064\u306e\u30ac\u30a4\u30c9\u304c\u8868\u793a\u3055\u308c\u308b\u3053\u3068\u306f\u306a\u3044\u3067\u3059\u304c\u3001\u7406\u60f3\u3068\u3057\u3066\u306f\u3001\u8868\u793a\u30bf\u30a4\u30df\u30f3\u30b0\u3092\u5206\u3051\u305f\u3044\u3068\u3044\u3046\u8981\u671b\u3067\u3059\u3002\n\n\u4f8b\uff1a\n\u2022 1\u56de\u76ee\u306e\u30bb\u30c3\u30b7\u30e7\u30f3\u3067\u300c\u5f8c\u3067\u898b\u308b\u300d\u30ac\u30a4\u30c9\u3092\u8868\u793a\n\u2022 \u6b21\u56de\u4ee5\u964d\u306e\u30bb\u30c3\u30b7\u30e7\u30f3\u3067\u300c\u500d\u901f\u518d\u751f\u300d\u30ac\u30a4\u30c9\u3092\u8868\u793a\uff08\u203b\u3059\u3067\u306b\u300c\u5f8c\u3067\u898b\u308b\u300d\u304c\u8868\u793a\u6e08\u307f\u3067\u3042\u308b\u3053\u3068\u3092\u6761\u4ef6\u306b\uff09\n\u80cc\u666f\u3068\u3057\u3066\u306f\u3001\u9023\u7d9a\u30ac\u30a4\u30c9\u8868\u793a\u3067\u8996\u8074\u3092\u59a8\u3052\u3001\u4e0d\u5feb\u306b\u611f\u3058\u308b\u53ef\u80fd\u6027\u306a\u3069\u3001\u30e6\u30fc\u30b6\u30fc\u4f53\u9a13\u3078\u306e\u914d\u616e\u304c\u3042\u308a\u307e\u3059\u3002\n\n\u73fe\u6642\u70b9\u3067\u306f\u3001Guide\u306e\u30c8\u30ea\u30ac\u30fc\u8a2d\u5b9a\u306b\u300c\u30a4\u30d9\u30f3\u30c8\u8ffd\u8de1\u6642\u300d\u3092\u8a2d\u5b9a\u3057\u3066\u3001\u4e00\u65b9\u306e\u30ac\u30a4\u30c9\u3092\u898b\u305f\u3068\u3044\u3046\u30a4\u30d9\u30f3\u30c8\u3092\u5951\u6a5f\u306b\u8868\u793a\u691c\u8a3c\u3057\u3066\u307f\u307e\u3057\u305f\u3002\n\u6642\u9593\u5dee\u3067\u306e\u30ac\u30a4\u30c9\u8868\u793a\u306f\u78ba\u8a8d\u3067\u304d\u305f\u306e\u3067\u3059\u304c\u3001\u4e0a\u8a18\u306e\u3088\u3046\u306a\u30a2\u30d7\u30ed\u30fc\u30c1\u304c\u53ef\u80fd\u304b\uff1f\u307e\u305f\u306f\u3088\u308a\u30b7\u30f3\u30d7\u30eb\u306a\u8a2d\u5b9a\u306f\u306a\u3044\u304b\u3001\u6559\u3048\u3066\u3044\u305f\u3060\u3051\u306a\u3044\u3067\u3057\u3087\u3046\u304b\n\n\u2022 \u5bfe\u8c61org\n \u25e6 \u7d44\u7e54\uff1aGLOBIS\n \u25e6 \u7d44\u7e54 ID\uff1a92108\n \u25e6 \u7d44\u7e54URL\uff1ahodai\n\n------------------------------------------------\n**AI Generated Summary**\nThe customer requested assistance with Guides and Surveys functionality for GLOBIS organization and ID92108. No new information provided.\n---\n\n\n> Ticket created from this message in **#camp_faq** via Thena",
+    "created_at": "2025-07-07T00:47:34Z",
+    "status": "pending",
+    "priority": "normal",
+    "customer_id": "20838698920091",
+    "product": "Unknown"
+  },
+  {
+    "id": 359425,
+    "subject": "Changed domain",
+    "description": "We've made a rebranding from www.parrotart.io to www.behind.art",
+    "created_at": "2025-07-06T21:44:35Z",
+    "status": "hold",
+    "priority": "normal",
+    "customer_id": "38691434309531",
+    "product": "Unknown"
+  },
+  {
+    "id": 359441,
+    "subject": "Error of Ampliutde v1 vardata",
+    "description": "Hi, Team\nThis is Hyeongjun at AB180.\n\nOur client, Musinsa, utilizes the Experiment Evaluation API, and errors occurred between 10:36 and 11:15, 15:39 and 16:11, and 18:48 and 19:31 on June 28, based on Korean time.\n\nWhen I checked the Amplitude status page, I found a data processing delay error. Was the API error caused by the data delay error?\n\nOr is it unrelated?",
+    "created_at": "2025-07-07T02:54:28Z",
+    "status": "solved",
+    "priority": "normal",
+    "customer_id": "11747361562139",
+    "product": "Unknown"
+  },
+  {
+    "id": 359442,
+    "subject": "app_instance_id clarification",
+    "description": "One of the property required to postback to GA4 is app instance id. We saw in the Webhook configuration that there's a user property called \"app_instance_id\" but we are unable to find this user property in the \"User Property Data\" module. So not too sure what does the \"app_instance_id\" means and what the source of it .",
+    "created_at": "2025-07-07T03:11:25Z",
+    "status": "pending",
+    "priority": "normal",
+    "customer_id": "14690577668123",
+    "product": "Unknown"
+  },
+  {
+    "id": 359450,
+    "subject": "Delete GameHouse Organization for EUROPE (NOT THE ONE IN US!!!!)",
+    "description": "READ CAREFULLY! We have two GameHouse organizations in Amplitude.\n\nThere is one that we are using and will start paying for very soon, there is one that we created a while ago, that is on the \u201cGrowth Trial Plan\u201d and we are not paying nor will be paying for.\n\nBoth organizations are called the same, but one is in the US, the other is in Europe.\n\n**The one we want to delete is the one in Europe!!**\n\n- **Name: \u201cGameHouse - DELETEME\u201d**\n- **Organization Id: 100001638**\n- URL: https://app**.eu.**amplitude.com/analytics/gamehouse   \u2190- EUROPE!!\n\nThe one in Europe has only 1 member (myself), has only one project. I also renamed it so that the name is clear that is the one to be deleted (\"GameHouse - DELETEME\")\n\nThe other organization (the one in the US) should NOT be deleted. Only the one with the details and organization ID provided in this email.\n\nThe reason is simple. We created two organizations, but we are using only one. So to prevent human errors by having 2 in your system, we just want to leave 1.\n\nThanks!",
+    "created_at": "2025-07-07T06:17:31Z",
+    "status": "hold",
+    "priority": "normal",
+    "customer_id": "38320782996763",
+    "product": "Unknown"
+  },
+  {
+    "id": 359451,
+    "subject": "\ud83d\udc0c Reporting Slowness",
+    "description": "Categories: [OTHER]. ",
+    "created_at": "2025-07-07T06:18:26Z",
+    "status": "solved",
+    "priority": "normal",
+    "customer_id": "38696818051483",
+    "product": "Unknown"
+  },
+  {
+    "id": 359452,
+    "subject": "Page view journey",
+    "description": "How can I see what all the users did after coming to my website, the journey map is giving me duplicate records.",
+    "created_at": "2025-07-07T06:22:49Z",
+    "status": "pending",
+    "priority": "normal",
+    "customer_id": "17361125536667",
+    "product": "Unknown"
+  },
+  {
+    "id": 359455,
+    "subject": "\ud83d\udc0c Reporting Slowness",
+    "description": "Categories: [OTHER]. While on the \"home\", I clicked \"start tour\" and nothing happens",
+    "created_at": "2025-07-07T06:58:50Z",
+    "status": "hold",
+    "priority": "normal",
+    "customer_id": "38697147295131",
+    "product": "Unknown"
+  },
+  {
+    "id": 359465,
+    "subject": "Re: Inquiry about getting information about experiment. ",
+    "description": "This is a follow-up to your previous request #358190 \"Inquiry about getting information about experiment. \"\n\n\n\nHi, Thao\n\nI am sending this email because I would like to confirm something.\nCurrently, Experiment Endpoints does not seem to provide information on experiment success metrics and their p-values separately. I would like to ask if there is a separate way to check this information. I need this data to compile experiment results.\n\nIs there a separate API endpoint or another way to access this information?",
+    "created_at": "2025-07-07T07:29:24Z",
+    "status": "pending",
+    "priority": "normal",
+    "customer_id": "11747361562139",
+    "product": "Unknown"
+  },
+  {
+    "id": 359466,
+    "subject": "Unable to log in through SSO",
+    "description": "Hi,\n\nWe are unable to login SSO in our voicemod workspace\n\nCan you help?\n\nThanks!",
+    "created_at": "2025-07-07T07:30:07Z",
+    "status": "pending",
+    "priority": "high",
+    "customer_id": "400382686791",
+    "product": "Unknown"
+  },
+  {
+    "id": 359467,
+    "subject": "Re: Can't activate free 1 year growth plan",
+    "description": "This is a follow-up to your previous request #357550 \"Can't activate free 1 year growth plan\"\n\nI was away from computer for 2 weeks so I couldn't reach your replies.\nI still cannot activate growth plan - when I go to the final page and click it - nothing happens and aplitude get me back to the main page (dashboard).\n\nCan you help me solve this out?\nPS: I would like to record a proof with a video - what is the biggest size of the video that I can attach?\n\nBest, Michael",
+    "created_at": "2025-07-07T07:39:54Z",
+    "status": "pending",
+    "priority": "normal",
+    "customer_id": "38027865461531",
+    "product": "Unknown"
+  },
+  {
+    "id": 359421,
+    "subject": "Delete organisation and account",
+    "description": "We don't use this platform anymore.",
+    "created_at": "2025-07-06T16:06:49Z",
+    "status": "hold",
+    "priority": "normal",
+    "customer_id": "4094563187",
+    "product": "Unknown"
+  },
+  {
+    "id": 359470,
+    "subject": "AUtocapture",
+    "description": "I turned off some of events of auto capture from admin page. But they were still recorded. Then I enforced to block events by hands. Can you check please?",
+    "created_at": "2025-07-07T07:56:40Z",
+    "status": "pending",
+    "priority": "high",
+    "customer_id": "37624107633563",
+    "product": "Unknown"
+  },
+  {
+    "id": 359472,
+    "subject": "open opportunity  - validation issues data vs GA4 ",
+    "description": "Hi Will\n\nWe are in the process of trying to validate the data vs GA4 and have quite a discrepancy at an overall session/user level, even before we start looking at channel attribution.\n\nBelow is the data for users, sessions and purchases by channel and then total at the bottom. We are running with a delta of ~60% for users and sessions which is substantial so are wondering if this is something to do with the setup and are wondering if we can:\n\n1. Validate the raw numbers somehow\n2.\n\nValidate the rules for session classification\n\n ![](https://amplitude.zendesk.com/attachments/token/yYkU2M6mZVBg7ElCSHWV8Z9Jz/?name=Screenshot+2025-07-07+at+10.11.57.png)",
+    "created_at": "2025-07-07T08:12:41Z",
+    "status": "pending",
+    "priority": "normal",
+    "customer_id": "19812608002331",
+    "product": "Unknown"
+  },
+  {
+    "id": 359473,
+    "subject": "could amplitude support first touch attribution via utm_source?",
+    "description": "could amplitude support first touch attribution via utm_source? https://amplitude.com/docs/analytics/charts/data-tables/data-tables-attribute-credit",
+    "created_at": "2025-07-07T08:14:33Z",
+    "status": "pending",
+    "priority": "normal",
+    "customer_id": "22078964107163",
+    "product": "Unknown"
+  },
+  {
+    "id": 359475,
+    "subject": "[CJON-ybtour] KPI view in Funnel : Frequency option",
+    "description": "Hi. Support team,\nOne of our clients, ybtour, mentioned that it is difficult to easily interpret the results provided in the **frequency option** at a glance. They requested a feature that would allow them to view segmented graph results in the Funnel chart using **Group By**, similar to how KPIs are displayed in the **Segmentation chart**.\n\n### Request Details:\n\n- **Funnel:** Provide a **KPI view** in the frequency option\n- **Funnel:** Allow **custom buckets** in the frequency option\n_(It is expected that if a custom bucket can isolate \u201c1 time\u201d values, it would allow a view similar to the KPI view. Dashboard > Table View.)_\n\nBest\nChun",
+    "created_at": "2025-07-07T08:16:00Z",
+    "status": "pending",
+    "priority": "normal",
+    "customer_id": "415453238812",
+    "product": "Unknown"
+  },
+  {
+    "id": 359481,
+    "subject": "Delete organization",
+    "description": "This was a test organization since we didn't have a real one set up yet.",
+    "created_at": "2025-07-07T09:27:08Z",
+    "status": "hold",
+    "priority": "normal",
+    "customer_id": "38698743104411",
+    "product": "Unknown"
+  },
+  {
+    "id": 359483,
+    "subject": "delete my organization",
+    "description": "Please delete my Organization it was created for testing.",
+    "created_at": "2025-07-07T09:32:13Z",
+    "status": "hold",
+    "priority": "normal",
+    "customer_id": "38698761988379",
+    "product": "Unknown"
+  },
+  {
+    "id": 359456,
+    "subject": "Unable to login using SSO in our voicemod workspace",
+    "description": "Hi,\n\nWe are unable to login SSO in our voicemod workspace\n\nCan you help?\n\nThanks!",
+    "created_at": "2025-07-07T07:14:22Z",
+    "status": "closed",
+    "priority": "normal",
+    "customer_id": "400382686791",
+    "product": "Unknown"
+  },
+  {
+    "id": 359422,
+    "subject": "Weird user re-mapping incident",
+    "description": "User 59113 got remapped to user 1135027, we don't know why and it looks like an issue because both users are active on Snoonu...",
+    "created_at": "2025-07-06T16:16:08Z",
+    "status": "closed",
+    "priority": "normal",
+    "customer_id": "1267191028110",
+    "product": "Unknown"
+  }
+]
