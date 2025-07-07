@@ -20,6 +20,7 @@ OPENAI_CLUSTERING_FORMAT = '''{{
 OPENAI_QUERY_FORMAT = '''{{
   "response_type": "query",
   "summary": "Brief summary suitable for Slack",
+  "large_result_set": false,
   "data": {{
     "answer": "Detailed answer to the question",
     "tickets": [
@@ -29,12 +30,23 @@ OPENAI_QUERY_FORMAT = '''{{
         "description": "Brief description or key details"
       }}
     ],
+    "ticket_ids": ["123", "456", "789"],
     "count": 0
   }},
   "metadata": {{
     "total_tickets_analyzed": {total_tickets},
     "query": "{query}"
   }}
+}}'''
+
+OPENAI_TIME_WINDOW_FORMAT = '''{{
+  "response_type": "time_window",
+  "has_time_reference": true,
+  "time_window": {{
+    "hours": 24,
+    "description": "last 24 hours"
+  }},
+  "reasoning": "Brief explanation of why this time window was extracted"
 }}'''
 
 # OpenAI Configuration
@@ -72,5 +84,12 @@ TICKET_FETCH_HOURS = 24
 # Environment Variable Names
 REQUIRED_ENV_VARS = ['ZENDESK_URL', 'ZENDESK_EMAIL', 'ZENDESK_TOKEN', 'OPENAI_API_KEY']
 OPTIONAL_ENV_VARS = ['SLACK_WEBHOOK_URL', 'TICKET_CNT_THRESHOLD', 'SEND_TEST_SLACK']
+
+# Time Window Constants
+MAX_LOOKBACK_HOURS = 24 * 60  # 2 months (60 days)
+DEFAULT_QUERY_HOURS = 24  # Default to 24 hours if no time window specified
+
+# Large Result Set Constants
+LARGE_RESULT_THRESHOLD = 20  # Switch to simplified format when results exceed this number
 
 DEFAULT_SEND_TEST_SLACK = False

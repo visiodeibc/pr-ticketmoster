@@ -81,16 +81,31 @@ class ZendeskClient:
         Returns:
             list: List of ticket dictionaries in our expected format
         """
+        return self.fetch_tickets_by_hours(TICKET_FETCH_HOURS)
+    
+    def fetch_tickets_by_hours(self, hours=None):
+        """
+        Fetch tickets created in the last N hours from Zendesk
+        
+        Args:
+            hours (int, optional): Number of hours to look back. Defaults to TICKET_FETCH_HOURS
+            
+        Returns:
+            list: List of ticket dictionaries in our expected format
+        """
         if not self.client:
             logger.error("Zendesk client not initialized. Cannot fetch tickets.")
             return []
         
+        if hours is None:
+            hours = TICKET_FETCH_HOURS
+        
         try:
-            # Calculate hours ago based on constant
+            # Calculate hours ago based on parameter
             now = datetime.now(timezone.utc)
-            cutoff = now - timedelta(hours=TICKET_FETCH_HOURS)
+            cutoff = now - timedelta(hours=hours)
             
-            logger.info(f"Fetching tickets created after {cutoff.isoformat()}")
+            logger.info(f"Fetching tickets created after {cutoff.isoformat()} ({hours} hours ago)")
             
             # Use Zendesk search API to get tickets from last period
             # Format: created>YYYY-MM-DD type:ticket
@@ -133,7 +148,7 @@ class ZendeskClient:
                 else:
                     logger.warning(f"Ticket #{ticket.id} has no creation date")
             
-            logger.info(f"Fetched {len(tickets)} tickets from Zendesk")
+            logger.info(f"Fetched {len(tickets)} tickets from Zendesk (last {hours} hours)")
             return tickets
             
         except Exception as e:
@@ -226,6 +241,18 @@ def fetch_recent_tickets():
         list: List of tickets from the last 24 hours
     """
     return zendesk_client.fetch_tickets_last_24h()
+
+def fetch_recent_tickets_by_hours(hours=None):
+    """
+    Public function to fetch recent tickets from Zendesk with custom time window
+    
+    Args:
+        hours (int, optional): Number of hours to look back. Defaults to TICKET_FETCH_HOURS
+        
+    Returns:
+        list: List of tickets from the specified time window
+    """
+    return zendesk_client.fetch_tickets_by_hours(hours)
 
 def save_tickets_locally(tickets, filename='fetched_tickets.json'):
     """

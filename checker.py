@@ -282,30 +282,60 @@ if __name__ == "__main__":
             sys.exit(1)
         custom_query = " ".join(sys.argv[2:])
         logger.info(f"Running custom query: {custom_query}")
-        tickets = fetch_recent_tickets()
-        parsed_data, summary = analyze_tickets_with_query(tickets, custom_query)
-        print("\n=== QUERY SUMMARY ===\n" + summary)
+        
+        # Import the new function
+        from ticket_analyzer import analyze_tickets_with_query_and_timeframe
+        
+        # Use the new function that handles time windows
+        parsed_data, summary, time_window_info = analyze_tickets_with_query_and_timeframe(None, custom_query)
+        
+        logger.info(f"Query completed. Time window used: {time_window_info}")
+        print(f"\n=== QUERY SUMMARY ===\n{summary}")
+        
+        if time_window_info:
+            print(f"\n=== TIME WINDOW INFO ===")
+            print(f"Description: {time_window_info.get('description', 'Unknown')}")
+            print(f"Hours: {time_window_info.get('hours', 'Unknown')}")
+            print(f"Has time reference: {time_window_info.get('has_time_reference', False)}")
+            print(f"Reasoning: {time_window_info.get('reasoning', 'No reasoning provided')}")
         
         # Extract tickets from unified format
         slack_tickets = []
+        is_large_result_set = False
+        
         if parsed_data and isinstance(parsed_data, dict):
             response_type = parsed_data.get('response_type', 'unknown')
             logger.info(f"Response type: {response_type}")
+            
+            is_large_result_set = parsed_data.get('large_result_set', False)
+            logger.info(f"Large result set: {is_large_result_set}")
             
             data = parsed_data.get('data', {})
             logger.info(f"Data section: {data}")
             
             if isinstance(data, dict):
-                slack_tickets = data.get('tickets', [])
-                logger.info(f"Extracted {len(slack_tickets)} tickets from unified format")
-                logger.info(f"Tickets: {slack_tickets}")
+                if is_large_result_set:
+                    # For large result sets, use ticket_ids array
+                    ticket_ids = data.get('ticket_ids', [])
+                    logger.info(f"Extracted {len(ticket_ids)} ticket IDs from large result set")
+                    
+                    # Convert ticket IDs to simple format for Slack
+                    slack_tickets = [{"ticket_id": ticket_id} for ticket_id in ticket_ids]
+                else:
+                    # For smaller result sets, use detailed tickets array
+                    slack_tickets = data.get('tickets', [])
+                    logger.info(f"Extracted {len(slack_tickets)} detailed tickets from standard result set")
+                
+                logger.info(f"Total tickets for Slack: {len(slack_tickets)}")
         
-        # Send to Slack with unified format
+        # Send to Slack with unified format including time window info
         slack_payload = {
             "issue_type": f"Custom Query: {custom_query}",
             "tickets": slack_tickets,
             "summary": summary,
-            "parsed_data": parsed_data
+            "parsed_data": parsed_data,
+            "time_window_info": time_window_info,  # Add time window info
+            "is_large_result_set": is_large_result_set  # Add large result set flag
         }
         
         if send_slack_notification(slack_payload):

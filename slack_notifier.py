@@ -59,58 +59,89 @@ def generate_slack_title(ticket_group, ticket_count):
 
 def send_slack_notification(ticket_group):
     """
-    Send a notification to Slack when a group of similar tickets is found
+    Send a Slack notification about a group of similar tickets
     
     Args:
         ticket_group: Dictionary containing:
-            - issue_type: Common issue description or "Custom Query: question"
-            - tickets: List of tickets with that issue
-            - summary: (optional) Custom summary from OpenAI
+            - issue_type: Type of issue
+            - tickets: List of tickets in the group
+            - summary: (optional) Summary text for queries
             - parsed_data: (optional) Full parsed data from OpenAI
+            - time_window_info: (optional) Time window information for queries
+            - is_large_result_set: (optional) Flag for large result sets
     
     Returns:
         bool: True if notification was sent successfully, False otherwise
     """
-    if not SLACK_WEBHOOK_URL:
-        logger.error("SLACK_WEBHOOK_URL environment variable not set")
-        
-        # For testing without webhook, just log the notification
-        ticket_count = len(ticket_group.get('tickets', []))
-        issue_type = ticket_group.get('issue_type', 'Unknown Issue')
-        summary = ticket_group.get('summary', '')
-        
-        title = generate_slack_title(ticket_group, ticket_count)
-        logger.info(f"TEST MODE: {title}")
-        logger.info(f"Issue: {issue_type}")
-        if summary:
-            logger.info(f"Summary: {summary}")
-        for ticket in ticket_group.get('tickets', []):
-            ticket_id = get_ticket_id(ticket)
-            subject = get_ticket_subject(ticket)
-            logger.info(f"- Ticket #{ticket_id}: {subject}")
-        return True  # Return True for testing
+    webhook_url = os.getenv("SLACK_WEBHOOK_URL")
+    if not webhook_url:
+        logger.warning("SLACK_WEBHOOK_URL not set, skipping Slack notification")
+        return False
     
-    # Format the ticket information
-    tickets = ticket_group.get('tickets', [])
-    ticket_count = len(tickets)
     issue_type = ticket_group.get('issue_type', 'Unknown Issue')
+    tickets = ticket_group.get('tickets', [])
     summary = ticket_group.get('summary', '')
+    parsed_data = ticket_group.get('parsed_data', {})
+    time_window_info = ticket_group.get('time_window_info', {})
+    is_large_result_set = ticket_group.get('is_large_result_set', False)
     
-    # Generate appropriate title
+    ticket_count = len(tickets)
+    
+    # Generate title
     title = generate_slack_title(ticket_group, ticket_count)
     
-    # Create ticket links
+    # Build ticket links - handle both detailed and simplified formats
     ticket_links = []
-    for ticket in tickets:
-        ticket_id = get_ticket_id(ticket)
-        subject = get_ticket_subject(ticket)
-        if ticket_id:
-            zendesk_url = f"https://amplitude.zendesk.com/agent/tickets/{ticket_id}"
-            ticket_links.append(f"<{zendesk_url}|#{ticket_id}> - {subject}")
-        else:
-            ticket_links.append(f"Unknown ID - {subject}")
     
-    ticket_list = truncate_ticket_list(ticket_links)
+    if is_large_result_set:
+        # For large result sets, use ultra-compact format with just ticket numbers
+        logger.info(f"Processing large result set with {ticket_count} tickets - using compact format")
+        for ticket in tickets:
+            ticket_id = ticket.get('ticket_id', 'Unknown')
+            if ticket_id and ticket_id != 'Unknown':
+                ticket_links.append(f"#{ticket_id}")
+            else:
+                ticket_links.append(f"#{ticket_id}")
+    else:
+        # For smaller result sets, use detailed format with full links
+        logger.info(f"Processing standard result set with {ticket_count} tickets")
+        for ticket in tickets:
+            ticket_id = get_ticket_id(ticket)
+            subject = get_ticket_subject(ticket)
+            if ticket_id:
+                zendesk_url = f"https://amplitude.zendesk.com/agent/tickets/{ticket_id}"
+                ticket_links.append(f"<{zendesk_url}|#{ticket_id}> - {subject}")
+            else:
+                ticket_links.append(f"Unknown ID - {subject}")
+    
+    # For large result sets, use ultra-compact display
+    if is_large_result_set:
+        # Join with commas for maximum compactness
+        ticket_list = ", ".join(ticket_links)
+        if len(ticket_list) > SLACK_MAX_TEXT_LENGTH:
+            # If still too long, truncate and add count
+            logger.warning(f"Slack message too long ({len(ticket_list)} chars > {SLACK_MAX_TEXT_LENGTH} limit)")
+            logger.warning(f"Truncating from {len(ticket_links)} tickets to fit Slack limits")
+            
+            visible_links = []
+            current_length = 0
+            for link in ticket_links:
+                if current_length + len(link) + 2 < SLACK_MAX_TEXT_LENGTH - 50:  # Reserve space for "... and X more"
+                    visible_links.append(link)
+                    current_length += len(link) + 2
+                else:
+                    break
+            
+            remaining_count = len(ticket_links) - len(visible_links)
+            ticket_list = ", ".join(visible_links) + f" ... and {remaining_count} more"
+            
+            logger.warning(f"Displaying {len(visible_links)} tickets in Slack, truncated {remaining_count} tickets")
+            logger.info(f"OpenAI found {len(ticket_links)} tickets, Slack displaying {len(visible_links)} tickets")
+        else:
+            logger.info(f"All {len(ticket_links)} tickets fit within Slack message limits")
+    else:
+        # For smaller result sets, use detailed format
+        ticket_list = truncate_ticket_list(ticket_links)
     
     # Use summary if available, otherwise use issue_type
     main_text = summary if summary else issue_type
@@ -119,6 +150,21 @@ def send_slack_notification(ticket_group):
     if issue_type.startswith('Custom Query:'):
         query_text = issue_type.replace('Custom Query: ', '')
         display_text = f"*Query:* {query_text}\n*Result:* {main_text}"
+        
+        # Add time window information if available
+        if time_window_info:
+            time_desc = time_window_info.get('description', 'Unknown time window')
+            display_text += f"\n*Time Window:* {time_desc}"
+            
+            # Add reasoning if available and different from standard
+            reasoning = time_window_info.get('reasoning', '')
+            if reasoning and not reasoning.startswith('Extracted from query'):
+                display_text += f"\n*Note:* {reasoning}"
+        
+        # Add note for large result sets
+        if is_large_result_set:
+            display_text += f"\n*Note:* Large result set ({ticket_count} tickets) - showing ticket numbers only"
+            display_text += f"\n*Zendesk Link:* <https://amplitude.zendesk.com/agent/tickets|View tickets in Zendesk>"
     else:
         display_text = f"*Issue Type:* {main_text}"
     
@@ -178,7 +224,7 @@ def send_slack_notification(ticket_group):
     # Send the notification to Slack
     try:
         response = requests.post(
-            SLACK_WEBHOOK_URL,
+            webhook_url,
             data=json.dumps(message),
             headers={"Content-Type": "application/json"},
             timeout=10
