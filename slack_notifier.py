@@ -108,9 +108,27 @@ def send_slack_notification(ticket_group):
         for ticket in tickets:
             ticket_id = get_ticket_id(ticket)
             subject = get_ticket_subject(ticket)
+            org_name = ticket.get('org_name', '')
+            org_id = ticket.get('org_id', '')
+            assignee = ticket.get('assignee', '')
+            
             if ticket_id:
                 zendesk_url = f"https://amplitude.zendesk.com/agent/tickets/{ticket_id}"
-                ticket_links.append(f"<{zendesk_url}|#{ticket_id}> - {subject}")
+                
+                # Build ticket display with org info and assignee if available
+                ticket_display = f"<{zendesk_url}|#{ticket_id}> - {subject}"
+                
+                # Add organization info
+                if org_name and org_id:
+                    ticket_display += f" (Org: {org_name} - {org_id})"
+                elif org_id:
+                    ticket_display += f" (Org ID: {org_id})"
+                
+                # Add assignee info
+                if assignee:
+                    ticket_display += f" [Assigned: {assignee}]"
+                
+                ticket_links.append(ticket_display)
             else:
                 ticket_links.append(f"Unknown ID - {subject}")
     
@@ -165,6 +183,26 @@ def send_slack_notification(ticket_group):
         if is_large_result_set:
             display_text += f"\n*Note:* Large result set ({ticket_count} tickets) - showing ticket numbers only"
             display_text += f"\n*Zendesk Link:* <https://amplitude.zendesk.com/agent/tickets|View tickets in Zendesk>"
+            
+            # Add organization summary if available
+            if parsed_data and parsed_data.get('metadata', {}).get('organizations'):
+                org_summary = parsed_data['metadata']['organizations']
+                org_list = []
+                for org_name, org_info in org_summary.items():
+                    count = org_info.get('count', 0)
+                    org_id = org_info.get('org_id', '')
+                    if org_id:
+                        org_list.append(f"{org_name} ({org_id}): {count} tickets")
+                    else:
+                        org_list.append(f"{org_name}: {count} tickets")
+                
+                if org_list:
+                    # Limit to top 5 organizations to avoid message bloat
+                    display_orgs = org_list[:5]
+                    if len(org_list) > 5:
+                        display_orgs.append(f"... and {len(org_list) - 5} more organizations")
+                    
+                    display_text += f"\n*Organizations:* {', '.join(display_orgs)}"
     else:
         display_text = f"*Issue Type:* {main_text}"
     

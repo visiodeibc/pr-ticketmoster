@@ -103,7 +103,8 @@ def cluster_with_openai(tickets):
         f"Requester Type: {t.get('requester_type', '')}, "
         f"JIRA ID: {t.get('jira_id', '')}, "
         f"JIRA Ticket ID: {t.get('jira_ticket_id', '')}, "
-        f"Link to Discourse: {t.get('link_to_discourse', '')}"
+        f"Link to Discourse: {t.get('link_to_discourse', '')}, "
+        f"Assignee: {t.get('assignee', '')}"
         for t in tickets
     ]
     
@@ -243,7 +244,8 @@ def analyze_tickets_with_query_and_timeframe(tickets, query, custom_timeframe=No
         f"Requester Type: {t.get('requester_type', '')}, "
         f"JIRA ID: {t.get('jira_id', '')}, "
         f"JIRA Ticket ID: {t.get('jira_ticket_id', '')}, "
-        f"Link to Discourse: {t.get('link_to_discourse', '')}"
+        f"Link to Discourse: {t.get('link_to_discourse', '')}, "
+        f"Assignee: {t.get('assignee', '')}"
         for t in tickets
     ]
     
@@ -301,6 +303,9 @@ def analyze_tickets_with_query_and_timeframe(tickets, query, custom_timeframe=No
         parsed_data, success = parse_openai_response(result, "query")
         if not success:
             return None, result, time_window_info
+        
+        # Enrich response with organization data from original tickets
+        parsed_data = enrich_response_with_org_data(parsed_data, tickets)
         
         # Add time window information to metadata
         if parsed_data and "metadata" in parsed_data:
@@ -442,6 +447,111 @@ def extract_time_window_from_query(query):
             "description": f"last {DEFAULT_QUERY_HOURS} hours",
             "reasoning": f"Error calling OpenAI: {e}"
         }
+
+def enrich_response_with_org_data(parsed_data, original_tickets):
+    """
+    Enrich OpenAI response with organization data from original Zendesk tickets
+    
+    Args:
+        parsed_data (dict): OpenAI response data
+        original_tickets (list): Original Zendesk ticket data with org info
+        
+    Returns:
+        dict: Enhanced response with organization data
+    """
+    if not parsed_data or not original_tickets:
+        return parsed_data
+    
+    # Create a lookup dictionary for quick ticket access
+    ticket_lookup = {str(ticket['id']): ticket for ticket in original_tickets}
+    
+    # Extract organization data from Zendesk client if available
+    try:
+        from zendesk_client import zendesk_client
+        org_cache = {}  # Cache organization lookups
+        
+        def get_org_info(ticket_data):
+            """Get organization info from ticket data"""
+            org_id = ticket_data.get('numeric_org_id')
+            if not org_id:
+                return None, None
+                
+            # Try to get org name from Zendesk API (with caching)
+            if org_id in org_cache:
+                return org_id, org_cache[org_id]
+                
+            try:
+                if zendesk_client.client:
+                    org = zendesk_client.client.organizations(id=org_id)
+                    org_name = org.name if org else f"Org {org_id}"
+                    org_cache[org_id] = org_name
+                    return org_id, org_name
+            except Exception as e:
+                logger.warning(f"Could not fetch organization {org_id}: {e}")
+                
+            # Fallback to just the ID
+            org_name = f"Organization {org_id}"
+            org_cache[org_id] = org_name
+            return org_id, org_name
+        
+    except ImportError:
+        logger.warning("Could not import zendesk_client for organization lookups")
+        def get_org_info(ticket_data):
+            org_id = ticket_data.get('numeric_org_id')
+            return org_id, f"Organization {org_id}" if org_id else (None, None)
+    
+    data = parsed_data.get('data', {})
+    
+    # Enrich detailed ticket objects (for smaller result sets)
+    if 'tickets' in data and data['tickets']:
+        enriched_tickets = []
+        for ticket in data['tickets']:
+            ticket_id = str(ticket.get('ticket_id', ''))
+            if ticket_id in ticket_lookup:
+                original_ticket = ticket_lookup[ticket_id]
+                org_id, org_name = get_org_info(original_ticket)
+                
+                # Add org info to the ticket
+                enriched_ticket = ticket.copy()
+                enriched_ticket['org_id'] = org_id
+                enriched_ticket['org_name'] = org_name
+                
+                # Add assignee information if available
+                assignee = original_ticket.get('assignee', '')
+                if assignee:
+                    enriched_ticket['assignee'] = assignee
+                
+                enriched_tickets.append(enriched_ticket)
+                
+                logger.debug(f"Enhanced ticket #{ticket_id} with org: {org_name} ({org_id}), assignee: {assignee}")
+            else:
+                # Keep original ticket if no match found
+                enriched_tickets.append(ticket)
+                logger.warning(f"Could not find original data for ticket #{ticket_id}")
+        
+        data['tickets'] = enriched_tickets
+    
+    # For large result sets, we could also enrich ticket_ids with org summary
+    if parsed_data.get('large_result_set', False) and 'ticket_ids' in data:
+        # Create organization summary for large result sets
+        org_summary = {}
+        for ticket_id in data['ticket_ids']:
+            if str(ticket_id) in ticket_lookup:
+                original_ticket = ticket_lookup[str(ticket_id)]
+                org_id, org_name = get_org_info(original_ticket)
+                if org_id:
+                    if org_name not in org_summary:
+                        org_summary[org_name] = {'org_id': org_id, 'count': 0}
+                    org_summary[org_name]['count'] += 1
+        
+        # Add org summary to metadata
+        if org_summary:
+            if 'metadata' not in parsed_data:
+                parsed_data['metadata'] = {}
+            parsed_data['metadata']['organizations'] = org_summary
+            logger.info(f"Added organization summary for large result set: {len(org_summary)} orgs")
+    
+    return parsed_data
 
 # Alternative methods (for demonstration - not fully implemented)
 

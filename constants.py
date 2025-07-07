@@ -27,7 +27,10 @@ OPENAI_QUERY_FORMAT = '''{{
       {{
         "ticket_id": "123",
         "subject": "Ticket subject",
-        "description": "Brief description or key details"
+        "description": "Brief description or key details",
+        "org_id": "12345",
+        "org_name": "Organization Name",
+        "assignee": "Support Agent Name"
       }}
     ],
     "ticket_ids": ["123", "456", "789"],
@@ -72,6 +75,8 @@ CUSTOM_FIELD_MAP = {
     360002325512: 'jira_ticket_id',
     9870708900891: 'link_to_discourse',
     114101027932: 'internal_chart_tool',
+    9870197721883: 'numeric_org_id',  # Organization ID field
+    24388397: 'assignee',  # Assignee field
 }
 
 # System Message for OpenAI
