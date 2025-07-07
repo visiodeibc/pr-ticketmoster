@@ -18,81 +18,19 @@ from constants import (
     DEFAULT_QUERY_HOURS,
     LARGE_RESULT_THRESHOLD
 )
+
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('ticket_analyzer')
 
-# Set up OpenAI
-# This is a hardcoded key - in production, use environment variables
-openai_api_key = os.environ.get("OPENAI_API_KEY")
+# Initialize OpenAI client
+client = openai.OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-# Initialize the client
-client = openai.OpenAI(api_key=openai_api_key)
-
-def analyze_similar_tickets(tickets):
-    """
-    Analyze tickets to find groups of similar issues using OpenAI
-    
-    Returns a list of groups, where each group contains:
-    - issue_type: Common issue description
-    - tickets: List of tickets with that issue
-    """
-    if not tickets:
-        logger.info("No tickets provided for analysis")
-        return []
-    
-    logger.info(f"Analyzing {len(tickets)} tickets for similarity")
-    
-    # Possible methods to identify similar tickets:
-    # Method 1: Direct clustering with OpenAI API (used here)
-    return cluster_with_openai(tickets)
-    
-    # Alternative methods that could be implemented:
-    # Method 2: Extract keywords and cluster by keyword similarity
-    # return cluster_by_keywords(tickets)
-    
-    # Method 3: Generate embeddings and cluster using cosine similarity
-    # return cluster_by_embeddings(tickets)
-    
-    # Method 4: Topic modeling to identify common themes
-    # return cluster_by_topics(tickets)
-    
-    # Method 5: Use two-stage approach: first classify issues, then cluster
-    # return two_stage_clustering(tickets)
-
-def parse_openai_response(response_text, expected_type="unknown"):
-    """
-    Parse OpenAI response with unified error handling and logging.
-    Returns (parsed_data, success) tuple.
-    """
-    try:
-        # Remove markdown/code block if present
-        cleaned = response_text.strip()
-        if cleaned.startswith("```"):
-            # Remove all leading/trailing backticks and whitespace
-            cleaned = cleaned.strip('`').strip()
-            # Remove language identifier if present
-            if cleaned.lower().startswith("json"):
-                cleaned = cleaned[4:].lstrip('\n').lstrip()
-        
-        logger.info(f"Cleaned OpenAI response for JSON parsing: {cleaned[:200]}...")
-        parsed = json.loads(cleaned)
-        logger.info(f"Successfully parsed {expected_type} response")
-        return parsed, True
-    except Exception as e:
-        logger.error(f"Failed to parse OpenAI response as JSON: {e}")
-        logger.error(f"Raw response: {response_text[:200]}...")
-        return None, False
-
-def cluster_with_openai(tickets):
-    """Group tickets by similarity using OpenAI's completion API"""
-    # Prepare ticket data for analysis
-    ticket_texts = [
+def prepare_ticket_texts(tickets):
+    """Convert tickets to formatted text for OpenAI analysis"""
+    return [
         f"Ticket #{t['id']}: Subject: {t['subject']}, Description: {t['description']}, "
         f"Internal Chart/Tool: {t.get('internal_chart_tool', '')}, "
         f"Internal Chart/Tool - AI tagged: {t.get('internal_chart_tool_ai_tagged', '')}, "
@@ -107,10 +45,71 @@ def cluster_with_openai(tickets):
         f"Assignee: {t.get('assignee', '')}"
         for t in tickets
     ]
+
+def call_openai_api(messages, max_tokens, analysis_type="analysis"):
+    """Unified OpenAI API caller with error handling"""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        logger.error("OpenAI API key not found")
+        return None, False
     
+    try:
+        logger.info(f"Calling OpenAI API for {analysis_type}")
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=messages,
+            temperature=OPENAI_TEMPERATURE,
+            max_tokens=max_tokens
+        )
+        result = response.choices[0].message.content.strip()
+        logger.info(f"Received response from OpenAI for {analysis_type}")
+        return result, True
+    except Exception as e:
+        logger.error(f"Error calling OpenAI API for {analysis_type}: {e}")
+        return None, False
+
+def parse_openai_response(response_text, expected_type="unknown"):
+    """Parse OpenAI response with unified error handling"""
+    try:
+        # Clean markdown code blocks if present
+        cleaned = response_text.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.strip('`').strip()
+            if cleaned.lower().startswith("json"):
+                cleaned = cleaned[4:].lstrip('\n').lstrip()
+        
+        # Remove JavaScript-style comments that OpenAI sometimes adds
+        import re
+        # Remove single-line comments (// comment)
+        cleaned = re.sub(r'//.*?(?=\n|$)', '', cleaned)
+        # Remove multi-line comments (/* comment */)
+        cleaned = re.sub(r'/\*.*?\*/', '', cleaned, flags=re.DOTALL)
+        # Clean up any trailing commas before closing brackets/braces
+        cleaned = re.sub(r',(\s*[}\]])', r'\1', cleaned)
+        
+        logger.info(f"Cleaned OpenAI response for JSON parsing: {cleaned[:200]}...")
+        parsed = json.loads(cleaned)
+        logger.info(f"Successfully parsed {expected_type} response")
+        return parsed, True
+    except Exception as e:
+        logger.error(f"Failed to parse OpenAI response as JSON: {e}")
+        logger.error(f"Raw response: {response_text[:200]}...")
+        return None, False
+
+def analyze_similar_tickets(tickets):
+    """Analyze tickets to find groups of similar issues using OpenAI"""
+    if not tickets:
+        logger.info("No tickets provided for analysis")
+        return []
+    
+    logger.info(f"Analyzing {len(tickets)} tickets for similarity")
+    return cluster_with_openai(tickets)
+
+def cluster_with_openai(tickets):
+    """Group tickets by similarity using OpenAI's completion API"""
+    ticket_texts = prepare_ticket_texts(tickets)
     logger.info(f"Prepared {len(ticket_texts)} ticket texts for OpenAI analysis")
     
-    # Create a prompt for OpenAI to analyze and group the tickets
     prompt = f"""
     I have a set of technical support tickets. 
     
@@ -123,133 +122,75 @@ def cluster_with_openai(tickets):
     - Only create groups with {MIN_TICKETS_FOR_GROUP}+ tickets that genuinely represent the same underlying issue
     - ticket_ids must be strings containing ONLY the numeric ID without any prefix or suffix
     - Update groups_found to the actual number of groups returned
+    - Return ONLY valid JSON without any comments, explanations, or additional text
     
     Here are the tickets:
     {ticket_texts}
     """
     
-    if not openai_api_key:
-        logger.error("OpenAI API key not found. Set the OPENAI_API_KEY environment variable.")
+    messages = [
+        {"role": "system", "content": SYSTEM_MESSAGE},
+        {"role": "user", "content": prompt}
+    ]
+    
+    result, success = call_openai_api(messages, OPENAI_MAX_TOKENS_CLUSTERING, "ticket clustering")
+    if not success:
         return []
     
-    try:
-        logger.info("Calling OpenAI API for ticket clustering")
-        response = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": SYSTEM_MESSAGE},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=OPENAI_TEMPERATURE,
-            max_tokens=OPENAI_MAX_TOKENS_CLUSTERING
-        )
-        
-        result = response.choices[0].message.content
-        logger.info("Received response from OpenAI")
-        
-        # Parse using unified parser
-        parsed_data, success = parse_openai_response(result, "clustering")
-        if not success:
-            return []
-        
-        # Extract groups and convert to legacy format
-        groups = parsed_data.get("data", {}).get("groups", [])
-        similar_groups = []
-        
-        for group in groups:
-            ticket_ids = group.get('ticket_ids', [])
-            logger.info(f"Processing group '{group.get('issue_type')}' with {len(ticket_ids)} tickets")
-            
-            # Find matching tickets
-            matching_tickets = []
-            for t in tickets:
-                if str(t['id']) in ticket_ids:
-                    matching_tickets.append(t)
-            
-            if len(matching_tickets) >= MIN_TICKETS_FOR_GROUP:
-                ticket_group = {
-                    'issue_type': group.get('issue_type'),
-                    'tickets': matching_tickets
-                }
-                similar_groups.append(ticket_group)
-                logger.info(f"Added group '{group.get('issue_type')}' with {len(matching_tickets)} tickets")
-            else:
-                logger.info(f"Skipping group '{group.get('issue_type')}' as it has fewer than {MIN_TICKETS_FOR_GROUP} tickets")
-        
-        return similar_groups
-        
-    except Exception as e:
-        logger.error(f"Error using OpenAI API: {e}")
+    parsed_data, success = parse_openai_response(result, "clustering")
+    if not success:
         return []
+    
+    # Convert to legacy format for backwards compatibility
+    groups = parsed_data.get("data", {}).get("groups", [])
+    similar_groups = []
+    
+    for group in groups:
+        ticket_ids = group.get('ticket_ids', [])
+        logger.info(f"Processing group '{group.get('issue_type')}' with {len(ticket_ids)} tickets")
+        
+        # Find matching tickets
+        matching_tickets = [t for t in tickets if str(t['id']) in ticket_ids]
+        
+        if len(matching_tickets) >= MIN_TICKETS_FOR_GROUP:
+            ticket_group = {
+                'issue_type': group.get('issue_type'),
+                'tickets': matching_tickets
+            }
+            similar_groups.append(ticket_group)
+            logger.info(f"Added group '{group.get('issue_type')}' with {len(matching_tickets)} tickets")
+        else:
+            logger.info(f"Skipping group '{group.get('issue_type')}' as it has fewer than {MIN_TICKETS_FOR_GROUP} tickets")
+    
+    return similar_groups
 
 def analyze_tickets_with_query(tickets, query):
-    """
-    Analyze tickets with a custom query using OpenAI.
-    This function is now deprecated in favor of analyze_tickets_with_query_and_timeframe.
-    Returns a tuple: (parsed_data, slack_summary)
-    """
+    """Deprecated: Use analyze_tickets_with_query_and_timeframe instead"""
     return analyze_tickets_with_query_and_timeframe(tickets, query)
 
 def analyze_tickets_with_query_and_timeframe(tickets, query, custom_timeframe=None):
-    """
-    Analyze tickets with a custom query using OpenAI, with support for dynamic time windows.
-    
-    Args:
-        tickets (list): List of tickets to analyze (will be ignored if custom_timeframe is provided)
-        query (str): User's query
-        custom_timeframe (dict, optional): Custom time window information. If None, will extract from query.
-    
-    Returns:
-        tuple: (parsed_data, slack_summary, time_window_info)
-    """
+    """Analyze tickets with a custom query using OpenAI, with support for dynamic time windows"""
     if not query:
-        logger.info("No query provided for analysis.")
+        logger.info("No query provided for analysis")
         return None, "No query provided.", None
     
-    # Extract time window from query if not provided
-    if custom_timeframe is None:
-        time_window_info = extract_time_window_from_query(query)
-    else:
-        time_window_info = custom_timeframe
-    
+    # Extract or use provided time window
+    time_window_info = custom_timeframe or extract_time_window_from_query(query)
     logger.info(f"Using time window: {time_window_info}")
     
-    # Fetch tickets based on the time window
-    from zendesk_client import fetch_recent_tickets_by_hours
-    
-    if time_window_info.get("has_time_reference", False) or custom_timeframe is not None:
-        hours = time_window_info.get("hours", DEFAULT_QUERY_HOURS)
-        logger.info(f"Fetching tickets from last {hours} hours based on query time reference")
-        tickets = fetch_recent_tickets_by_hours(hours)
-    else:
-        # Use provided tickets or fetch default
-        if not tickets:
-            logger.info("No tickets provided and no time reference found, fetching default tickets")
-            tickets = fetch_recent_tickets_by_hours(DEFAULT_QUERY_HOURS)
-    
+    # Fetch tickets based on time window
+    tickets = get_tickets_for_timeframe(tickets, time_window_info, custom_timeframe)
     if not tickets:
         logger.info("No tickets found for analysis with query")
         return None, "No tickets found for the specified time window.", time_window_info
     
     logger.info(f"Analyzing {len(tickets)} tickets with custom query: {query}")
-
-    ticket_texts = [
-        f"Ticket #{t['id']}: Subject: {t['subject']}, Description: {t['description']}, "
-        f"Internal Chart/Tool: {t.get('internal_chart_tool', '')}, "
-        f"Internal Chart/Tool - AI tagged: {t.get('internal_chart_tool_ai_tagged', '')}, "
-        f"Internal Chart/Tool - AI generated: {t.get('internal_chart_tool_ai_generated', '')}, "
-        f"Steps to reproduce: {t.get('steps_to_reproduce', '')}, "
-        f"Request Type - AI tagged: {t.get('request_type_ai_tagged', '')}, "
-        f"Request Type - CNIL: {t.get('request_type_cnil', '')}, "
-        f"Requester Type: {t.get('requester_type', '')}, "
-        f"JIRA ID: {t.get('jira_id', '')}, "
-        f"JIRA Ticket ID: {t.get('jira_ticket_id', '')}, "
-        f"Link to Discourse: {t.get('link_to_discourse', '')}, "
-        f"Assignee: {t.get('assignee', '')}"
-        for t in tickets
-    ]
     
-    # Include time window information in the prompt
+    # Clean time references from query to avoid influencing content analysis
+    cleaned_query = clean_time_references_from_query(query, time_window_info)
+    
+    # Prepare data and make API call
+    ticket_texts = prepare_ticket_texts(tickets)
     time_context = f"These tickets were collected from the {time_window_info.get('description', 'last 24 hours')}."
     
     prompt = f"""
@@ -259,88 +200,115 @@ def analyze_tickets_with_query_and_timeframe(tickets, query, custom_timeframe=No
     {time_context}
 
     Please answer the following question based on the tickets above:
-    {query}
+    {cleaned_query}
 
     IMPORTANT INSTRUCTIONS:
-    - If your analysis finds more than {LARGE_RESULT_THRESHOLD} relevant tickets, set "large_result_set" to true
-    - For large result sets (>{LARGE_RESULT_THRESHOLD} tickets):
+    - Group your findings into logical issue categories (e.g., "Login Issues", "Billing Problems", etc.)
+    - Each group should contain tickets that relate to the same underlying issue or topic
+    - If your analysis finds more than {LARGE_RESULT_THRESHOLD} total relevant tickets, set "large_result_set" to true
+    - For large result sets (>{LARGE_RESULT_THRESHOLD} total tickets):
       * Only provide ticket IDs in the "ticket_ids" array (no detailed ticket objects)
-      * Keep the "tickets" array empty
-      * Focus on a concise summary
-    - For smaller result sets (≤{LARGE_RESULT_THRESHOLD} tickets):
+      * Keep the "tickets" array empty for each group
+      * Focus on concise group summaries
+    - For smaller result sets (≤{LARGE_RESULT_THRESHOLD} total tickets):
       * Set "large_result_set" to false
-      * Include detailed ticket objects in the "tickets" array
-      * Also include ticket IDs in the "ticket_ids" array
-    - Always update "count" to reflect the actual number of relevant tickets found
-    - In your summary, always use the ACTUAL COUNT of tickets found, not the threshold number ({LARGE_RESULT_THRESHOLD})
-    - Make summary concise but informative
+      * Include detailed ticket objects in the "tickets" array for each group
+      * Also include ticket IDs in the "ticket_ids" array for each group
+    - Always update "count" for each group to reflect the actual number of tickets in that group
+    - Update "total_tickets" to reflect the sum of all relevant tickets across all groups
+    - In your summary, always use ACTUAL COUNTS of tickets found, not threshold numbers
+    - Make summary concise but informative, mentioning the number of groups and total tickets
     - Consider the time window context in your analysis
 
     Return your response as a JSON object with this exact structure:
     {OPENAI_QUERY_FORMAT.format(total_tickets=len(tickets), query=query)}
+    
+    CRITICAL: Return ONLY valid JSON without any comments, explanations, or additional text.
     """
     
-    if not openai_api_key:
-        logger.error("OpenAI API key not found.")
+    messages = [
+        {"role": "system", "content": SYSTEM_MESSAGE},
+        {"role": "user", "content": prompt}
+    ]
+    
+    result, success = call_openai_api(messages, OPENAI_MAX_TOKENS_QUERY, "custom query analysis")
+    if not success:
         return None, "OpenAI API key not configured.", time_window_info
     
-    try:
-        logger.info("Calling OpenAI API for custom query analysis")
-        response = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": SYSTEM_MESSAGE},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=OPENAI_TEMPERATURE,
-            max_tokens=OPENAI_MAX_TOKENS_QUERY
-        )
-        
-        result = response.choices[0].message.content.strip()
-        logger.info("Received response from OpenAI for custom query")
-        
-        # Parse using unified parser
-        parsed_data, success = parse_openai_response(result, "query")
-        if not success:
-            return None, result, time_window_info
-        
-        # Enrich response with organization data from original tickets
-        parsed_data = enrich_response_with_org_data(parsed_data, tickets)
-        
-        # Add time window information to metadata
-        if parsed_data and "metadata" in parsed_data:
-            parsed_data["metadata"]["time_window"] = time_window_info
-        
-        summary = parsed_data.get("summary", "No summary available")
-        
-        # Enhance summary with time window context
-        time_desc = time_window_info.get("description", "last 24 hours")
-        enhanced_summary = f"{summary} (Data from {time_desc})"
-        
-        logger.info(f"Parsed query response successfully. Enhanced summary: {enhanced_summary}")
-        
-        return parsed_data, enhanced_summary, time_window_info
-        
-    except Exception as e:
-        logger.error(f"Error using OpenAI API for custom query: {e}")
-        return None, f"Error analyzing tickets: {e}", time_window_info
+    parsed_data, success = parse_openai_response(result, "query")
+    if not success:
+        return None, result, time_window_info
+    
+    # Enrich with organization data and add time window to metadata
+    parsed_data = enrich_response_with_org_data(parsed_data, tickets)
+    if parsed_data and "metadata" in parsed_data:
+        parsed_data["metadata"]["time_window"] = time_window_info
+    
+    summary = parsed_data.get("summary", "No summary available")
+    time_desc = time_window_info.get("description", "last 24 hours")
+    enhanced_summary = f"{summary} (Data from {time_desc})"
+    
+    logger.info(f"Parsed query response successfully. Enhanced summary: {enhanced_summary}")
+    return parsed_data, enhanced_summary, time_window_info
+
+def clean_time_references_from_query(query, time_window_info):
+    """Remove time-related phrases from query to avoid influencing content analysis"""
+    if not time_window_info.get("has_time_reference", False):
+        return query
+    
+    import re
+    
+    # Common time reference patterns to remove
+    time_patterns = [
+        r'\b(in the )?(past|last|previous)\s+(hour|day|week|month|year)s?\b',
+        r'\b(in the )?(past|last|previous)\s+\d+\s+(hour|day|week|month|year)s?\b',
+        r'\b(yesterday|today)\b',
+        r'\b(in the )?(last|past)\s+\d+\s*(h|hr|hours?|d|days?|w|weeks?|m|months?|y|years?)\b',
+        r'\b(this|last)\s+(week|month|year)\b',
+        r'\b\d+\s*(hour|day|week|month|year)s?\s+(ago)\b',
+        r'\bwithin\s+(the\s+)?(last|past)\s+\d*\s*(hour|day|week|month|year)s?\b',
+        r'\bover\s+(the\s+)?(last|past)\s+\d*\s*(hour|day|week|month|year)s?\b',
+        r'\bduring\s+(the\s+)?(last|past)\s+\d*\s*(hour|day|week|month|year)s?\b',
+        r'\bfrom\s+(the\s+)?(last|past)\s+\d*\s*(hour|day|week|month|year)s?\b'
+    ]
+    
+    cleaned_query = query
+    for pattern in time_patterns:
+        cleaned_query = re.sub(pattern, '', cleaned_query, flags=re.IGNORECASE)
+    
+    # Clean up extra whitespace and prepositions left behind
+    cleaned_query = re.sub(r'\s+', ' ', cleaned_query)  # Multiple spaces to single
+    cleaned_query = re.sub(r'\s+(in|of|for|about|with|from)\s+', r' \1 ', cleaned_query)  # Fix spacing around prepositions
+    cleaned_query = re.sub(r'^\s*(in|of|for|about|with|from)\s+', '', cleaned_query, flags=re.IGNORECASE)  # Remove leading prepositions
+    cleaned_query = cleaned_query.strip()
+    
+    # Ensure we don't return an empty query
+    if not cleaned_query:
+        logger.warning("Query became empty after time reference cleaning, using original")
+        return query
+    
+    # Log the cleaning if significant changes were made
+    if cleaned_query != query:
+        logger.info(f"Cleaned query: '{query}' → '{cleaned_query}'")
+    
+    return cleaned_query
+
+def get_tickets_for_timeframe(tickets, time_window_info, custom_timeframe):
+    """Get appropriate tickets based on time window information"""
+    from zendesk_client import fetch_recent_tickets_by_hours
+    
+    if time_window_info.get("has_time_reference", False) or custom_timeframe is not None:
+        hours = time_window_info.get("hours", DEFAULT_QUERY_HOURS)
+        logger.info(f"Fetching tickets from last {hours} hours based on query time reference")
+        return fetch_recent_tickets_by_hours(hours)
+    else:
+        if not tickets:
+            logger.info("No tickets provided and no time reference found, fetching default tickets")
+            return fetch_recent_tickets_by_hours(DEFAULT_QUERY_HOURS)
+        return tickets
 
 def extract_time_window_from_query(query):
-    """
-    Extract time window information from user query using OpenAI
-    
-    Args:
-        query (str): User's query text
-        
-    Returns:
-        dict: Time window information in format:
-            {
-                "has_time_reference": bool,
-                "hours": int,
-                "description": str,
-                "reasoning": str
-            }
-    """
+    """Extract time window information from user query using OpenAI"""
     if not query:
         logger.warning("No query provided for time window extraction")
         return {
@@ -378,10 +346,16 @@ def extract_time_window_from_query(query):
     - If the requested time window exceeds the maximum lookback ({MAX_LOOKBACK_HOURS} hours), cap it at the maximum
     - Be conservative with ambiguous time references
     - Provide clear reasoning for your decision
+    - Return ONLY valid JSON without any comments, explanations, or additional text
     """
     
-    if not openai_api_key:
-        logger.error("OpenAI API key not found for time window extraction")
+    messages = [
+        {"role": "system", "content": "You are an expert at understanding time references in natural language queries."},
+        {"role": "user", "content": prompt}
+    ]
+    
+    result, success = call_openai_api(messages, 1000, "time window extraction")
+    if not success:
         return {
             "has_time_reference": False,
             "hours": DEFAULT_QUERY_HOURS,
@@ -390,197 +364,125 @@ def extract_time_window_from_query(query):
         }
     
     try:
-        logger.info("Calling OpenAI API for time window extraction")
-        response = client.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": "You are an expert at understanding time references in natural language queries."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.1,  # Lower temperature for more consistent parsing
-            max_tokens=1000
-        )
+        parsed_result = json.loads(result)
+        logger.info(f"Successfully parsed time window: {parsed_result}")
         
-        result = response.choices[0].message.content.strip()
-        logger.info("Received time window extraction response from OpenAI")
+        # Extract and validate time window information
+        has_time_reference = parsed_result.get("has_time_reference", False)
+        hours = parsed_result.get("time_window", {}).get("hours", DEFAULT_QUERY_HOURS)
+        description = parsed_result.get("time_window", {}).get("description", f"last {hours} hours")
+        reasoning = parsed_result.get("reasoning", "Extracted from query")
         
-        # Parse the JSON response
-        try:
-            parsed_result = json.loads(result)
-            logger.info(f"Successfully parsed time window: {parsed_result}")
-            
-            # Extract and validate the time window information
-            has_time_reference = parsed_result.get("has_time_reference", False)
-            hours = parsed_result.get("time_window", {}).get("hours", DEFAULT_QUERY_HOURS)
-            description = parsed_result.get("time_window", {}).get("description", f"last {hours} hours")
-            reasoning = parsed_result.get("reasoning", "Extracted from query")
-            
-            # Ensure hours is within bounds
-            if hours > MAX_LOOKBACK_HOURS:
-                logger.warning(f"Time window {hours} hours exceeds maximum {MAX_LOOKBACK_HOURS} hours, capping it")
-                hours = MAX_LOOKBACK_HOURS
-                description = f"last {MAX_LOOKBACK_HOURS // 24} days (capped at maximum)"
-                reasoning += f" (capped at maximum lookback of {MAX_LOOKBACK_HOURS} hours)"
-            
-            return {
-                "has_time_reference": has_time_reference,
-                "hours": hours,
-                "description": description,
-                "reasoning": reasoning
-            }
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse time window JSON response: {e}")
-            logger.error(f"Raw response: {result}")
-            return {
-                "has_time_reference": False,
-                "hours": DEFAULT_QUERY_HOURS,
-                "description": f"last {DEFAULT_QUERY_HOURS} hours",
-                "reasoning": f"Failed to parse OpenAI response: {e}"
-            }
-            
-    except Exception as e:
-        logger.error(f"Error extracting time window from query: {e}")
+        # Ensure hours is within bounds
+        if hours > MAX_LOOKBACK_HOURS:
+            logger.warning(f"Time window {hours} hours exceeds maximum {MAX_LOOKBACK_HOURS} hours, capping it")
+            hours = MAX_LOOKBACK_HOURS
+            description = f"last {MAX_LOOKBACK_HOURS // 24} days (capped at maximum)"
+            reasoning += f" (capped at maximum lookback of {MAX_LOOKBACK_HOURS} hours)"
+        
+        return {
+            "has_time_reference": has_time_reference,
+            "hours": hours,
+            "description": description,
+            "reasoning": reasoning
+        }
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse time window JSON response: {e}")
+        logger.error(f"Raw response: {result}")
         return {
             "has_time_reference": False,
             "hours": DEFAULT_QUERY_HOURS,
             "description": f"last {DEFAULT_QUERY_HOURS} hours",
-            "reasoning": f"Error calling OpenAI: {e}"
+            "reasoning": f"Failed to parse OpenAI response: {e}"
         }
 
 def enrich_response_with_org_data(parsed_data, original_tickets):
-    """
-    Enrich OpenAI response with organization data from original Zendesk tickets
-    
-    Args:
-        parsed_data (dict): OpenAI response data
-        original_tickets (list): Original Zendesk ticket data with org info
-        
-    Returns:
-        dict: Enhanced response with organization data
-    """
+    """Enrich OpenAI response with ticket data from original Zendesk tickets"""
     if not parsed_data or not original_tickets:
         return parsed_data
     
-    # Create a lookup dictionary for quick ticket access
     ticket_lookup = {str(ticket['id']): ticket for ticket in original_tickets}
-    
-    # Extract organization data from Zendesk client if available
-    try:
-        from zendesk_client import zendesk_client
-        org_cache = {}  # Cache organization lookups
-        
-        def get_org_info(ticket_data):
-            """Get organization info from ticket data"""
-            org_id = ticket_data.get('numeric_org_id')
-            if not org_id:
-                return None, None
-                
-            # Try to get org name from Zendesk API (with caching)
-            if org_id in org_cache:
-                return org_id, org_cache[org_id]
-                
-            try:
-                if zendesk_client.client:
-                    org = zendesk_client.client.organizations(id=org_id)
-                    org_name = org.name if org else f"Org {org_id}"
-                    org_cache[org_id] = org_name
-                    return org_id, org_name
-            except Exception as e:
-                logger.warning(f"Could not fetch organization {org_id}: {e}")
-                
-            # Fallback to just the ID
-            org_name = f"Organization {org_id}"
-            org_cache[org_id] = org_name
-            return org_id, org_name
-        
-    except ImportError:
-        logger.warning("Could not import zendesk_client for organization lookups")
-        def get_org_info(ticket_data):
-            org_id = ticket_data.get('numeric_org_id')
-            return org_id, f"Organization {org_id}" if org_id else (None, None)
-    
     data = parsed_data.get('data', {})
     
-    # Enrich detailed ticket objects (for smaller result sets)
-    if 'tickets' in data and data['tickets']:
-        enriched_tickets = []
-        for ticket in data['tickets']:
-            ticket_id = str(ticket.get('ticket_id', ''))
-            if ticket_id in ticket_lookup:
-                original_ticket = ticket_lookup[ticket_id]
-                org_id, org_name = get_org_info(original_ticket)
-                
-                # Add org info to the ticket
-                enriched_ticket = ticket.copy()
-                enriched_ticket['org_id'] = org_id
-                enriched_ticket['org_name'] = org_name
-                
-                # Add assignee information if available
-                assignee = original_ticket.get('assignee', '')
-                if assignee:
-                    enriched_ticket['assignee'] = assignee
-                
-                enriched_tickets.append(enriched_ticket)
-                
-                logger.debug(f"Enhanced ticket #{ticket_id} with org: {org_name} ({org_id}), assignee: {assignee}")
-            else:
-                # Keep original ticket if no match found
-                enriched_tickets.append(ticket)
-                logger.warning(f"Could not find original data for ticket #{ticket_id}")
+    # Handle groups format (new unified format)
+    if 'groups' in data and data['groups']:
+        enriched_groups = []
+        total_tickets_for_org_summary = []
         
-        data['tickets'] = enriched_tickets
+        for group in data['groups']:
+            enriched_group = group.copy()
+            
+            # Enrich detailed ticket objects for smaller result sets
+            if 'tickets' in group and group['tickets']:
+                enriched_group['tickets'] = enrich_ticket_list(group['tickets'], ticket_lookup)
+            
+            # Collect ticket IDs for org summary
+            if 'ticket_ids' in group:
+                total_tickets_for_org_summary.extend(group['ticket_ids'])
+            
+            enriched_groups.append(enriched_group)
+        
+        data['groups'] = enriched_groups
+        
+        # Create org summary for large result sets
+        if parsed_data.get('large_result_set', False) and total_tickets_for_org_summary:
+            add_org_summary_to_metadata(parsed_data, total_tickets_for_org_summary, ticket_lookup)
     
-    # For large result sets, we could also enrich ticket_ids with org summary
-    if parsed_data.get('large_result_set', False) and 'ticket_ids' in data:
-        # Create organization summary for large result sets
-        org_summary = {}
-        for ticket_id in data['ticket_ids']:
-            if str(ticket_id) in ticket_lookup:
-                original_ticket = ticket_lookup[str(ticket_id)]
-                org_id, org_name = get_org_info(original_ticket)
-                if org_id:
-                    if org_name not in org_summary:
-                        org_summary[org_name] = {'org_id': org_id, 'count': 0}
-                    org_summary[org_name]['count'] += 1
+    # Handle legacy tickets format for backwards compatibility
+    elif 'tickets' in data and data['tickets']:
+        data['tickets'] = enrich_ticket_list(data['tickets'], ticket_lookup)
         
-        # Add org summary to metadata
-        if org_summary:
-            if 'metadata' not in parsed_data:
-                parsed_data['metadata'] = {}
-            parsed_data['metadata']['organizations'] = org_summary
-            logger.info(f"Added organization summary for large result set: {len(org_summary)} orgs")
+        # Create org summary for large result sets
+        if parsed_data.get('large_result_set', False) and 'ticket_ids' in data:
+            add_org_summary_to_metadata(parsed_data, data['ticket_ids'], ticket_lookup)
     
     return parsed_data
 
-# Alternative methods (for demonstration - not fully implemented)
+def enrich_ticket_list(tickets, ticket_lookup):
+    """Enrich a list of tickets with original Zendesk data"""
+    enriched_tickets = []
+    
+    for ticket in tickets:
+        ticket_id = str(ticket.get('ticket_id', ''))
+        if ticket_id in ticket_lookup:
+            original_ticket = ticket_lookup[ticket_id]
+            enriched_ticket = ticket.copy()
+            
+            # Add organization and assignee info
+            enriched_ticket['org_id'] = original_ticket.get('numeric_org_id', '')
+            if original_ticket.get('assignee'):
+                enriched_ticket['assignee'] = original_ticket['assignee']
+            
+            # Add JIRA and Discourse links
+            for field in ['jira_id', 'jira_ticket_id', 'link_to_discourse']:
+                if original_ticket.get(field):
+                    enriched_ticket[field] = original_ticket[field]
+            
+            enriched_tickets.append(enriched_ticket)
+            logger.debug(f"Enhanced ticket #{ticket_id} with org_id: {original_ticket.get('numeric_org_id', 'N/A')}")
+        else:
+            enriched_tickets.append(ticket)
+            logger.warning(f"Could not find original data for ticket #{ticket_id}")
+    
+    return enriched_tickets
 
-def cluster_by_keywords(tickets):
-    """Extract keywords and cluster tickets based on keyword similarity"""
-    # Implementation would extract key terms from each ticket 
-    # and group tickets with similar keyword profiles
-    print("Keyword clustering not implemented in this POC")
-    return []
-
-def cluster_by_embeddings(tickets):
-    """Use embeddings to cluster similar tickets"""
-    # Implementation would:
-    # 1. Generate embeddings for each ticket using OpenAI or similar
-    # 2. Cluster embeddings using cosine similarity or clustering algorithms
-    # 3. Return the clusters as ticket groups
-    print("Embedding-based clustering not implemented in this POC")
-    return []
-
-def cluster_by_topics(tickets):
-    """Use topic modeling to identify ticket themes"""
-    # Implementation would use LDA or similar algorithms to identify topic themes
-    print("Topic modeling not implemented in this POC")
-    return []
-
-def two_stage_clustering(tickets):
-    """First classify issue types, then cluster within each type"""
-    # Implementation would:
-    # 1. Use classification to assign tickets to broad categories
-    # 2. Within each category, cluster to find specific issues
-    print("Two-stage clustering not implemented in this POC")
-    return [] 
+def add_org_summary_to_metadata(parsed_data, ticket_ids, ticket_lookup):
+    """Add organization summary to metadata for large result sets"""
+    org_summary = {}
+    
+    for ticket_id in ticket_ids:
+        if str(ticket_id) in ticket_lookup:
+            original_ticket = ticket_lookup[str(ticket_id)]
+            org_id = original_ticket.get('numeric_org_id')
+            if org_id:
+                org_key = f"Organization {org_id}"
+                if org_key not in org_summary:
+                    org_summary[org_key] = {'org_id': org_id, 'count': 0}
+                org_summary[org_key]['count'] += 1
+    
+    if org_summary:
+        if 'metadata' not in parsed_data:
+            parsed_data['metadata'] = {}
+        parsed_data['metadata']['organizations'] = org_summary
+        logger.info(f"Added organization summary for large result set: {len(org_summary)} orgs") 

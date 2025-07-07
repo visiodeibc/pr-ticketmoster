@@ -4,7 +4,7 @@ import json
 import logging
 from datetime import datetime
 from dotenv import load_dotenv
-from constants import SLACK_MAX_TEXT_LENGTH, SLACK_MAX_BLOCKS
+from constants import SLACK_MAX_TEXT_LENGTH, SLACK_MAX_BLOCKS, JIRA_BASE_URL, LARGE_RESULT_THRESHOLD
 load_dotenv()
 # Set up logging
 logger = logging.getLogger('slack_notifier')
@@ -19,19 +19,28 @@ def truncate_text(text, max_length=SLACK_MAX_TEXT_LENGTH):
     return text[:max_length-3] + "..."
 
 def truncate_ticket_list(ticket_links, max_length=SLACK_MAX_TEXT_LENGTH):
-    """Truncate ticket list to fit Slack limits"""
+    """Truncate ticket list to fit Slack limits, handling indented sub-items"""
     if not ticket_links:
         return "No tickets found"
     
     result = ""
     truncated_count = 0
+    main_ticket_count = 0
     
     for i, link in enumerate(ticket_links):
         test_result = result + link + "\n"
         if len(test_result) > max_length - 100:  # Leave room for truncation message
-            truncated_count = len(ticket_links) - i
+            # Count remaining main tickets (not indented sub-items)
+            remaining_items = ticket_links[i:]
+            for item in remaining_items:
+                if not item.startswith('    '):  # Main ticket, not sub-item
+                    truncated_count += 1
             break
         result = test_result
+        
+        # Count main tickets for proper truncation message
+        if not link.startswith('    '):  # Main ticket, not sub-item
+            main_ticket_count += 1
     
     if truncated_count > 0:
         result += f"\n... and {truncated_count} more tickets"
@@ -50,6 +59,17 @@ def generate_slack_title(ticket_group, ticket_count):
     """Generate appropriate Slack title based on the notification type"""
     issue_type = ticket_group.get('issue_type', '')
     
+    # Check if this is a consolidated groups notification
+    if 'groups' in ticket_group and 'total_tickets' in ticket_group:
+        groups = ticket_group.get('groups', [])
+        total_tickets = ticket_group.get('total_tickets', 0)
+        
+        # Differentiate between clustering alerts and query results with multiple groups
+        if issue_type.startswith('Custom Query:'):
+            return f"📊 Query Results: {len(groups)} Issue Categories Found ({total_tickets} Total Tickets)"
+        else:
+            return f"🚨 Alert: {len(groups)} Issue Groups Found ({total_tickets} Total Tickets)"
+    
     # Check if this is a custom query (starts with "Custom Query:")
     if issue_type.startswith('Custom Query:'):
         return f"📊 Query Results: {ticket_count} Tickets Found"
@@ -59,16 +79,23 @@ def generate_slack_title(ticket_group, ticket_count):
 
 def send_slack_notification(ticket_group):
     """
-    Send a Slack notification about a group of similar tickets
+    Send a Slack notification about a group of similar tickets or consolidated groups
     
     Args:
-        ticket_group: Dictionary containing:
+        ticket_group: Dictionary containing either:
+            Single group:
             - issue_type: Type of issue
             - tickets: List of tickets in the group
             - summary: (optional) Summary text for queries
             - parsed_data: (optional) Full parsed data from OpenAI
             - time_window_info: (optional) Time window information for queries
             - is_large_result_set: (optional) Flag for large result sets
+            
+            Consolidated groups:
+            - issue_type: "Multiple Issue Groups Detected"
+            - groups: List of group objects
+            - total_tickets: Total number of tickets across all groups
+            - summary: Summary of all groups
     
     Returns:
         bool: True if notification was sent successfully, False otherwise
@@ -79,6 +106,12 @@ def send_slack_notification(ticket_group):
         return False
     
     issue_type = ticket_group.get('issue_type', 'Unknown Issue')
+    
+    # Check if this is a consolidated groups notification (clustering or multi-group query results)
+    if 'groups' in ticket_group and 'total_tickets' in ticket_group:
+        return send_consolidated_groups_notification(ticket_group, webhook_url)
+    
+    # Handle single group (existing logic)
     tickets = ticket_group.get('tickets', [])
     summary = ticket_group.get('summary', '')
     parsed_data = ticket_group.get('parsed_data', {})
@@ -90,27 +123,90 @@ def send_slack_notification(ticket_group):
     # Generate title
     title = generate_slack_title(ticket_group, ticket_count)
     
-    # Build ticket links - handle both detailed and simplified formats
+    # Build content based on result set size
+    if is_large_result_set:
+        # For large result sets, use compact format
+        ticket_links = build_ticket_links(tickets, True)
+        ticket_list = format_ticket_list(ticket_links, True)
+    else:
+        # For smaller result sets, use the new detailed bullet point format
+        ticket_list = build_single_group_detailed_display(tickets, issue_type)
+    
+    # Build display text
+    display_text = build_display_text(issue_type, summary, time_window_info, is_large_result_set, ticket_count, parsed_data)
+    
+    # Create and send message
+    message = create_slack_message(title, display_text, ticket_list)
+    return send_slack_message(message, webhook_url)
+
+def send_consolidated_groups_notification(ticket_group, webhook_url):
+    """Handle consolidated groups notification"""
+    
+    groups = ticket_group.get('groups', [])
+    total_tickets = ticket_group.get('total_tickets', 0)
+    summary = ticket_group.get('summary', '')
+    time_window_info = ticket_group.get('time_window_info', {})
+    
+    # Determine if this is a large result set based on total tickets
+    is_large_result_set = total_tickets > LARGE_RESULT_THRESHOLD
+    
+    # Generate title
+    title = f"🚨 Alert: {len(groups)} Issue Groups Found ({total_tickets} Total Tickets)"
+    
+    # Build group display
+    if is_large_result_set:
+        # Compact format for large result sets
+        group_display = build_compact_groups_display(groups, total_tickets)
+    else:
+        # Detailed format for smaller result sets  
+        group_display = build_detailed_groups_display(groups)
+    
+    # Build main display text with context awareness
+    issue_type = ticket_group.get('issue_type', '')
+    if issue_type.startswith('Custom Query:'):
+        query_text = issue_type.replace('Custom Query: ', '')
+        display_text = f"*Query:* {query_text}\n\n*Summary:* {summary}"
+        
+        # Add time window info for query results
+        if time_window_info:
+            time_desc = time_window_info.get('description', 'Unknown time window')
+            display_text += f"\n\n*Time Window:* {time_desc}"
+    else:
+        display_text = f"*Summary:* {summary}"
+    
+    if is_large_result_set:
+        display_text += f"\n\n*Note:* Large result set ({total_tickets} tickets) - showing group summaries only"
+        display_text += f"\n\n*Zendesk Link:* <https://amplitude.zendesk.com/agent/tickets|View tickets in Zendesk>"
+    
+    # Create and send message
+    message = create_slack_message(title, display_text, group_display)
+    return send_slack_message(message, webhook_url) 
+
+def build_ticket_links(tickets, is_large_result_set):
+    """Build ticket links based on result set size"""
     ticket_links = []
     
     if is_large_result_set:
         # For large result sets, use ultra-compact format with just ticket numbers
-        logger.info(f"Processing large result set with {ticket_count} tickets - using compact format")
+        logger.info(f"Processing large result set with {len(tickets)} tickets - using compact format")
         for ticket in tickets:
-            ticket_id = ticket.get('ticket_id', 'Unknown')
+            ticket_id = ticket.get('ticket_id') or ticket.get('id', 'Unknown')
             if ticket_id and ticket_id != 'Unknown':
                 ticket_links.append(f"#{ticket_id}")
             else:
                 ticket_links.append(f"#{ticket_id}")
     else:
         # For smaller result sets, use detailed format with full links
-        logger.info(f"Processing standard result set with {ticket_count} tickets")
+        logger.info(f"Processing standard result set with {len(tickets)} tickets")
         for ticket in tickets:
             ticket_id = get_ticket_id(ticket)
             subject = get_ticket_subject(ticket)
             org_name = ticket.get('org_name', '')
-            org_id = ticket.get('org_id', '')
+            org_id = ticket.get('org_id', '') or ticket.get('numeric_org_id', '')
             assignee = ticket.get('assignee', '')
+            jira_id = ticket.get('jira_id', '')
+            jira_ticket_id = ticket.get('jira_ticket_id', '')
+            discourse_link = ticket.get('link_to_discourse', '')
             
             if ticket_id:
                 zendesk_url = f"https://amplitude.zendesk.com/agent/tickets/{ticket_id}"
@@ -129,22 +225,48 @@ def send_slack_notification(ticket_group):
                     ticket_display += f" [Assigned: {assignee}]"
                 
                 ticket_links.append(ticket_display)
+                
+                # Add JIRA and Discourse links with indentation if available
+                additional_links = []
+                
+                # Handle JIRA links
+                if jira_id or jira_ticket_id:
+                    if jira_id and jira_ticket_id:
+                        jira_link = f"    📋 JIRA: <{JIRA_BASE_URL}/{jira_ticket_id}|{jira_ticket_id}> (ID: {jira_id})"
+                    elif jira_ticket_id:
+                        jira_link = f"    📋 JIRA: <{JIRA_BASE_URL}/{jira_ticket_id}|{jira_ticket_id}>"
+                    elif jira_id:
+                        jira_link = f"    📋 JIRA ID: {jira_id}"
+                    additional_links.append(jira_link)
+                
+                # Handle Discourse links
+                if discourse_link:
+                    if discourse_link.startswith('http'):
+                        discourse_display = f"    💬 Discourse: <{discourse_link}|View Discussion>"
+                    else:
+                        discourse_display = f"    💬 Discourse: {discourse_link}"
+                    additional_links.append(discourse_display)
+                
+                # Add additional links if any exist
+                if additional_links:
+                    ticket_links.extend(additional_links)
             else:
                 ticket_links.append(f"Unknown ID - {subject}")
     
-    # For large result sets, use ultra-compact display
+    return ticket_links
+
+def format_ticket_list(ticket_links, is_large_result_set):
+    """Format ticket list based on result set size"""
     if is_large_result_set:
         # Join with commas for maximum compactness
         ticket_list = ", ".join(ticket_links)
         if len(ticket_list) > SLACK_MAX_TEXT_LENGTH:
-            # If still too long, truncate and add count
             logger.warning(f"Slack message too long ({len(ticket_list)} chars > {SLACK_MAX_TEXT_LENGTH} limit)")
-            logger.warning(f"Truncating from {len(ticket_links)} tickets to fit Slack limits")
             
             visible_links = []
             current_length = 0
             for link in ticket_links:
-                if current_length + len(link) + 2 < SLACK_MAX_TEXT_LENGTH - 50:  # Reserve space for "... and X more"
+                if current_length + len(link) + 2 < SLACK_MAX_TEXT_LENGTH - 50:
                     visible_links.append(link)
                     current_length += len(link) + 2
                 else:
@@ -152,37 +274,31 @@ def send_slack_notification(ticket_group):
             
             remaining_count = len(ticket_links) - len(visible_links)
             ticket_list = ", ".join(visible_links) + f" ... and {remaining_count} more"
-            
-            logger.warning(f"Displaying {len(visible_links)} tickets in Slack, truncated {remaining_count} tickets")
-            logger.info(f"OpenAI found {len(ticket_links)} tickets, Slack displaying {len(visible_links)} tickets")
-        else:
-            logger.info(f"All {len(ticket_links)} tickets fit within Slack message limits")
+            logger.warning(f"Displaying {len(visible_links)} tickets, truncated {remaining_count}")
+        
+        return ticket_list
     else:
-        # For smaller result sets, use detailed format
-        ticket_list = truncate_ticket_list(ticket_links)
-    
-    # Use summary if available, otherwise use issue_type
+        return truncate_ticket_list(ticket_links)
+
+def build_display_text(issue_type, summary, time_window_info, is_large_result_set, ticket_count, parsed_data):
+    """Build the main display text for single group notifications"""
     main_text = summary if summary else issue_type
     
-    # For custom queries, clean up the issue_type display
     if issue_type.startswith('Custom Query:'):
         query_text = issue_type.replace('Custom Query: ', '')
-        display_text = f"*Query:* {query_text}\n*Result:* {main_text}"
+        display_text = f"*Query:* {query_text}\n\n*Result:* {main_text}"
         
-        # Add time window information if available
         if time_window_info:
             time_desc = time_window_info.get('description', 'Unknown time window')
-            display_text += f"\n*Time Window:* {time_desc}"
+            display_text += f"\n\n*Time Window:* {time_desc}"
             
-            # Add reasoning if available and different from standard
             reasoning = time_window_info.get('reasoning', '')
             if reasoning and not reasoning.startswith('Extracted from query'):
-                display_text += f"\n*Note:* {reasoning}"
+                display_text += f"\n\n*Note:* {reasoning}"
         
-        # Add note for large result sets
         if is_large_result_set:
-            display_text += f"\n*Note:* Large result set ({ticket_count} tickets) - showing ticket numbers only"
-            display_text += f"\n*Zendesk Link:* <https://amplitude.zendesk.com/agent/tickets|View tickets in Zendesk>"
+            display_text += f"\n\n*Note:* Large result set ({ticket_count} tickets) - showing ticket numbers only"
+            display_text += f"\n\n*Zendesk Link:* <https://amplitude.zendesk.com/agent/tickets|View tickets in Zendesk>"
             
             # Add organization summary if available
             if parsed_data and parsed_data.get('metadata', {}).get('organizations'):
@@ -197,26 +313,223 @@ def send_slack_notification(ticket_group):
                         org_list.append(f"{org_name}: {count} tickets")
                 
                 if org_list:
-                    # Limit to top 5 organizations to avoid message bloat
                     display_orgs = org_list[:5]
                     if len(org_list) > 5:
                         display_orgs.append(f"... and {len(org_list) - 5} more organizations")
-                    
-                    display_text += f"\n*Organizations:* {', '.join(display_orgs)}"
+                    display_text += f"\n\n*Organizations:* {', '.join(display_orgs)}"
     else:
         display_text = f"*Issue Type:* {main_text}"
     
-    # Truncate display text to fit Slack limits
-    display_text = truncate_text(display_text)
+    return truncate_text(display_text)
+
+def build_compact_groups_display(groups, total_tickets):
+    """Build compact display for large result sets with multiple groups"""
+    group_summaries = []
+    for group in groups:
+        issue_type = group.get('issue_type', 'Unknown Issue')
+        
+        # For large result sets, count tickets from ticket_ids array; for small sets, count from tickets array
+        ticket_count = group.get('count', 0)  # First try the count field from OpenAI
+        if ticket_count == 0:
+            # Fallback: count from either tickets (detailed) or ticket_ids (large result set)
+            tickets_count = len(group.get('tickets', []))
+            ticket_ids_count = len(group.get('ticket_ids', []))
+            ticket_count = tickets_count if tickets_count > 0 else ticket_ids_count
+        
+        # Use consistent bullet point formatting
+        group_summaries.append(f"• *{issue_type}*: {ticket_count} tickets")
     
-    # Format the Slack message
-    message = {
+    return "\n".join(group_summaries)
+
+def build_detailed_groups_display(groups):
+    """Build detailed display for smaller result sets with multiple groups"""
+    group_displays = []
+    
+    for i, group in enumerate(groups, 1):
+        issue_type = group.get('issue_type', 'Unknown Issue')
+        tickets = group.get('tickets', [])
+        
+        # Count tickets correctly for both large and small result sets
+        ticket_count = group.get('count', 0)  # First try the count field from OpenAI
+        if ticket_count == 0:
+            # Fallback: count from either tickets (detailed) or ticket_ids (large result set)  
+            tickets_count = len(tickets)
+            ticket_ids_count = len(group.get('ticket_ids', []))
+            ticket_count = tickets_count if tickets_count > 0 else ticket_ids_count
+        
+        # Use bullet point for group header with proper indentation
+        group_header = f"• *Group {i}: {issue_type}* ({ticket_count} tickets)"
+        group_displays.append(group_header)
+        
+        # Build ticket links for this group with deeper indentation
+        for ticket in tickets:
+            ticket_id = get_ticket_id(ticket)
+            subject = get_ticket_subject(ticket)
+            org_name = ticket.get('org_name', '')
+            org_id = ticket.get('org_id', '') or ticket.get('numeric_org_id', '')
+            assignee = ticket.get('assignee', '')
+            jira_id = ticket.get('jira_id', '')
+            jira_ticket_id = ticket.get('jira_ticket_id', '')
+            discourse_link = ticket.get('link_to_discourse', '')
+            
+            if ticket_id:
+                zendesk_url = f"https://amplitude.zendesk.com/agent/tickets/{ticket_id}"
+                
+                # Build ticket display with bullet point and deeper indentation (4 spaces)
+                ticket_display = f"    • <{zendesk_url}|#{ticket_id}> - {subject}"
+                
+                # Add organization info if available
+                if org_name and org_id:
+                    ticket_display += f" (Org: {org_name} - {org_id})"
+                elif org_id:
+                    ticket_display += f" (Org ID: {org_id})"
+                
+                # Add assignee info if available
+                if assignee:
+                    ticket_display += f" [Assigned: {assignee}]"
+                
+                group_displays.append(ticket_display)
+                
+                # Add JIRA and Discourse links with even deeper indentation (8 spaces)
+                # Handle JIRA links
+                if jira_id or jira_ticket_id:
+                    logger.debug(f"Processing JIRA links for ticket {ticket_id}: jira_id={jira_id}, jira_ticket_id={jira_ticket_id}")
+                    
+                    # Check if we have a proper JIRA ticket ID
+                    clickable_jira_id = None
+                    if jira_ticket_id and jira_ticket_id.strip():
+                        clickable_jira_id = jira_ticket_id.strip()
+                    elif jira_id and jira_id.strip():
+                        # Check if jira_id looks like a ticket identifier (e.g., "AMP-134406")
+                        jira_id_cleaned = jira_id.strip()
+                        if '-' in jira_id_cleaned and any(c.isalpha() for c in jira_id_cleaned):
+                            clickable_jira_id = jira_id_cleaned
+                    
+                    if clickable_jira_id:
+                        # Make JIRA link clickable with proper URL (8 spaces indentation)
+                        jira_url = f"{JIRA_BASE_URL}/{clickable_jira_id}"
+                        jira_link = f"        📋 JIRA: <{jira_url}|{clickable_jira_id}>"
+                        logger.debug(f"Created clickable JIRA link: {jira_link}")
+                        group_displays.append(jira_link)
+                    elif jira_id and jira_id.strip():
+                        # Fallback for numeric or other JIRA IDs (8 spaces indentation)
+                        jira_link = f"        📋 JIRA ID: {jira_id.strip()}"
+                        logger.debug(f"Created JIRA ID display: {jira_link}")
+                        group_displays.append(jira_link)
+                
+                # Handle Discourse links
+                if discourse_link and discourse_link.strip():
+                    logger.debug(f"Processing Discourse link for ticket {ticket_id}: {discourse_link}")
+                    
+                    discourse_link = discourse_link.strip()
+                    if discourse_link.startswith('http'):
+                        discourse_display = f"        💬 Discourse: <{discourse_link}|View Discussion>"
+                    else:
+                        discourse_display = f"        💬 Discourse: {discourse_link}"
+                    logger.debug(f"Created Discourse link: {discourse_display}")
+                    group_displays.append(discourse_display)
+            else:
+                group_displays.append(f"    • #{ticket_id or 'Unknown'} - {subject}")
+        
+        # Add empty line between groups (except for the last group)
+        if i < len(groups):
+            group_displays.append("")
+    
+    return "\n".join(group_displays)
+
+def build_single_group_detailed_display(tickets, issue_type):
+    """Build detailed display for single group (including query results) with bullet point formatting"""
+    ticket_displays = []
+    
+    # Determine group header based on issue type
+    if issue_type.startswith('Custom Query:'):
+        group_header = f"• *Query Results* ({len(tickets)} tickets)"
+    else:
+        group_header = f"• *{issue_type}* ({len(tickets)} tickets)"
+    
+    ticket_displays.append(group_header)
+    
+    # Build ticket links with consistent indentation
+    for ticket in tickets:
+        ticket_id = get_ticket_id(ticket)
+        subject = get_ticket_subject(ticket)
+        org_name = ticket.get('org_name', '')
+        org_id = ticket.get('org_id', '') or ticket.get('numeric_org_id', '')
+        assignee = ticket.get('assignee', '')
+        jira_id = ticket.get('jira_id', '')
+        jira_ticket_id = ticket.get('jira_ticket_id', '')
+        discourse_link = ticket.get('link_to_discourse', '')
+        
+        if ticket_id:
+            zendesk_url = f"https://amplitude.zendesk.com/agent/tickets/{ticket_id}"
+            
+            # Build ticket display with bullet point and indentation (4 spaces)
+            ticket_display = f"    • <{zendesk_url}|#{ticket_id}> - {subject}"
+            
+            # Add organization info if available
+            if org_name and org_id:
+                ticket_display += f" (Org: {org_name} - {org_id})"
+            elif org_id:
+                ticket_display += f" (Org ID: {org_id})"
+            
+            # Add assignee info if available
+            if assignee:
+                ticket_display += f" [Assigned: {assignee}]"
+            
+            ticket_displays.append(ticket_display)
+            
+            # Add JIRA and Discourse links with deeper indentation (8 spaces)
+            # Handle JIRA links
+            if jira_id or jira_ticket_id:
+                logger.debug(f"Processing JIRA links for ticket {ticket_id}: jira_id={jira_id}, jira_ticket_id={jira_ticket_id}")
+                
+                # Check if we have a proper JIRA ticket ID
+                clickable_jira_id = None
+                if jira_ticket_id and jira_ticket_id.strip():
+                    clickable_jira_id = jira_ticket_id.strip()
+                elif jira_id and jira_id.strip():
+                    # Check if jira_id looks like a ticket identifier (e.g., "AMP-134406")
+                    jira_id_cleaned = jira_id.strip()
+                    if '-' in jira_id_cleaned and any(c.isalpha() for c in jira_id_cleaned):
+                        clickable_jira_id = jira_id_cleaned
+                
+                if clickable_jira_id:
+                    # Make JIRA link clickable with proper URL (8 spaces indentation)
+                    jira_url = f"{JIRA_BASE_URL}/{clickable_jira_id}"
+                    jira_link = f"        📋 JIRA: <{jira_url}|{clickable_jira_id}>"
+                    logger.debug(f"Created clickable JIRA link: {jira_link}")
+                    ticket_displays.append(jira_link)
+                elif jira_id and jira_id.strip():
+                    # Fallback for numeric or other JIRA IDs (8 spaces indentation)
+                    jira_link = f"        📋 JIRA ID: {jira_id.strip()}"
+                    logger.debug(f"Created JIRA ID display: {jira_link}")
+                    ticket_displays.append(jira_link)
+            
+            # Handle Discourse links
+            if discourse_link and discourse_link.strip():
+                logger.debug(f"Processing Discourse link for ticket {ticket_id}: {discourse_link}")
+                
+                discourse_link = discourse_link.strip()
+                if discourse_link.startswith('http'):
+                    discourse_display = f"        💬 Discourse: <{discourse_link}|View Discussion>"
+                else:
+                    discourse_display = f"        💬 Discourse: {discourse_link}"
+                logger.debug(f"Created Discourse link: {discourse_display}")
+                ticket_displays.append(discourse_display)
+        else:
+            ticket_displays.append(f"    • #{ticket_id or 'Unknown'} - {subject}")
+    
+    return "\n".join(ticket_displays)
+
+def create_slack_message(title, display_text, content):
+    """Create Slack message structure"""
+    return {
         "blocks": [
             {
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": truncate_text(title, 150)  # Headers have stricter limits
+                    "text": truncate_text(title, 150)
                 }
             },
             {
@@ -230,7 +543,7 @@ def send_slack_notification(ticket_group):
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"*Tickets:*\n{ticket_list}"
+                    "text": f"*Details:*\n{content}"
                 }
             },
             {
@@ -241,25 +554,12 @@ def send_slack_notification(ticket_group):
                         "text": f"Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                     }
                 ]
-            },
-            {
-                "type": "actions",
-                "elements": [
-                    {
-                        "type": "button",
-                        "text": {
-                            "type": "plain_text",
-                            "text": "View All Tickets"
-                        },
-                        "url": "https://yourcompany.zendesk.com/agent/search/1",  # Replace with actual search URL
-                        "style": "primary"
-                    }
-                ]
             }
         ]
     }
-    
-    # Send the notification to Slack
+
+def send_slack_message(message, webhook_url):
+    """Send message to Slack"""
     try:
         response = requests.post(
             webhook_url,

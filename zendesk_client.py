@@ -254,39 +254,4 @@ def fetch_recent_tickets_by_hours(hours=None):
     """
     return zendesk_client.fetch_tickets_by_hours(hours)
 
-def save_tickets_locally(tickets, filename='fetched_tickets.json'):
-    """
-    Save fetched tickets to local file for backup and debugging
-    
-    Args:
-        tickets: List of ticket dictionaries
-        filename: Name of file to save to
-    """
-    try:
-        with open(filename, 'w') as f:
-            json.dump(tickets, f, indent=2, default=str)
-        logger.info(f"Saved {len(tickets)} tickets to {filename}")
-    except Exception as e:
-        logger.error(f"Failed to save tickets to {filename}: {e}")
-
-def load_tickets_from_file(filename='fetched_tickets.json'):
-    """
-    Load tickets from local file as fallback
-    
-    Args:
-        filename: Name of file to load from
-        
-    Returns:
-        list: List of tickets or empty list if file doesn't exist
-    """
-    try:
-        with open(filename, 'r') as f:
-            tickets = json.load(f)
-        logger.info(f"Loaded {len(tickets)} tickets from {filename}")
-        return tickets
-    except FileNotFoundError:
-        logger.warning(f"File {filename} not found")
-        return []
-    except Exception as e:
-        logger.error(f"Failed to load tickets from {filename}: {e}")
-        return [] 
+ 

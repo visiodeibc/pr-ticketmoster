@@ -1,15 +1,27 @@
 # OpenAI Response Format Templates
 OPENAI_CLUSTERING_FORMAT = '''{{
   "response_type": "clustering",
-  "summary": "Brief summary for Slack (e.g., 'Found 2 groups of similar issues affecting 8 tickets')",
+  "summary": "Brief summary suitable for Slack",
+  "large_result_set": false,
   "data": {{
     "groups": [
       {{
-        "issue_type": "Descriptive name for the common issue",
+        "issue_type": "Descriptive name for the issue or answer category",
+        "tickets": [
+          {{
+            "ticket_id": "123",
+            "subject": "Ticket subject", 
+            "description": "Brief description or key details",
+            "org_id": "12345",
+            "org_name": "Organization Name",
+            "assignee": "Support Agent Name"
+          }}
+        ],
         "ticket_ids": ["123", "456", "789"],
         "count": 3
       }}
-    ]
+    ],
+    "total_tickets": 0
   }},
   "metadata": {{
     "total_tickets_analyzed": {total_tickets},
@@ -22,19 +34,24 @@ OPENAI_QUERY_FORMAT = '''{{
   "summary": "Brief summary suitable for Slack",
   "large_result_set": false,
   "data": {{
-    "answer": "Detailed answer to the question",
-    "tickets": [
+    "groups": [
       {{
-        "ticket_id": "123",
-        "subject": "Ticket subject",
-        "description": "Brief description or key details",
-        "org_id": "12345",
-        "org_name": "Organization Name",
-        "assignee": "Support Agent Name"
+        "issue_type": "Descriptive name for the issue or answer category",
+        "tickets": [
+          {{
+            "ticket_id": "123",
+            "subject": "Ticket subject", 
+            "description": "Brief description or key details",
+            "org_id": "12345",
+            "org_name": "Organization Name",
+            "assignee": "Support Agent Name"
+          }}
+        ],
+        "ticket_ids": ["123", "456", "789"],
+        "count": 3
       }}
     ],
-    "ticket_ids": ["123", "456", "789"],
-    "count": 0
+    "total_tickets": 0
   }},
   "metadata": {{
     "total_tickets_analyzed": {total_tickets},
@@ -96,5 +113,8 @@ DEFAULT_QUERY_HOURS = 24  # Default to 24 hours if no time window specified
 
 # Large Result Set Constants
 LARGE_RESULT_THRESHOLD = 20  # Switch to simplified format when results exceed this number
+
+# External Links Configuration
+JIRA_BASE_URL = "https://amplitude.atlassian.net/browse"  # Customize for your JIRA instance
 
 DEFAULT_SEND_TEST_SLACK = False

@@ -6,11 +6,54 @@ import os
 import logging
 from ticket_analyzer import analyze_similar_tickets
 from slack_notifier import send_slack_notification
-from zendesk_client import fetch_recent_tickets, save_tickets_locally
+from zendesk_client import fetch_recent_tickets
+from constants import MIN_TICKETS_FOR_GROUP
 
 # Simple logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger('zendesk_alert')
+
+def enrich_clustering_groups_with_org_data(groups, original_tickets):
+    """
+    Enrich clustering groups with full ticket data from original Zendesk tickets
+    
+    Args:
+        groups (list): List of clustering groups with tickets
+        original_tickets (list): Original Zendesk ticket data with all fields
+        
+    Returns:
+        list: Enhanced groups with complete ticket data
+    """
+    if not groups or not original_tickets:
+        return groups
+    
+    # Create a lookup dictionary for quick ticket access
+    ticket_lookup = {str(ticket['id']): ticket for ticket in original_tickets}
+    
+    enriched_groups = []
+    for group in groups:
+        enriched_group = group.copy()
+        enriched_tickets = []
+        
+        for ticket in group.get('tickets', []):
+            ticket_id = str(ticket.get('id', ''))
+            if ticket_id in ticket_lookup:
+                # Use the complete original ticket data which includes all fields:
+                # numeric_org_id, assignee, jira_id, jira_ticket_id, link_to_discourse, etc.
+                enriched_ticket = ticket_lookup[ticket_id].copy()
+                enriched_tickets.append(enriched_ticket)
+                logger.debug(f"Enriched clustering ticket #{ticket_id} with org_id: {enriched_ticket.get('numeric_org_id', 'N/A')}")
+            else:
+                # Keep original ticket if no match found
+                enriched_tickets.append(ticket)
+                logger.warning(f"Could not find original data for clustering ticket #{ticket_id}")
+        
+        enriched_group['tickets'] = enriched_tickets
+        enriched_groups.append(enriched_group)
+        
+        logger.info(f"Enriched clustering group '{group.get('issue_type')}' with {len(enriched_tickets)} tickets")
+    
+    return enriched_groups
 
 def load_tickets():
     """Load tickets from Zendesk API or fallback to sample data"""
@@ -19,7 +62,6 @@ def load_tickets():
     
     if tickets:
         logger.info(f"Loaded {len(tickets)} tickets from Zendesk")
-        save_tickets_locally(tickets)
         return tickets
     
     # Fallback to sample data for testing
@@ -43,18 +85,48 @@ def check_for_alerts():
     # Analyze for similar issues
     similar_groups = analyze_similar_tickets(tickets)
     
+    # Enrich clustering groups with complete ticket data
+    logger.info("Enriching clustering groups with complete ticket data...")
+    enriched_groups = enrich_clustering_groups_with_org_data(similar_groups, tickets)
+    
     # Send alerts for groups with threshold+ tickets
-    threshold = int(os.environ.get('TICKET_CNT_THRESHOLD', '5'))
-    alerts_sent = 0
+    # Use environment variable if set, otherwise use the same threshold as OpenAI analysis
+    threshold = int(os.environ.get('TICKET_CNT_THRESHOLD', str(MIN_TICKETS_FOR_GROUP)))
+    qualifying_groups = []
+    total_tickets = 0
     
-    for group in similar_groups:
+    logger.info(f"Using alert threshold: {threshold} tickets")
+    
+    for group in enriched_groups:
         ticket_count = len(group['tickets'])
+        logger.info(f"Found group '{group['issue_type']}' with {ticket_count} tickets")
         if ticket_count >= threshold:
-            logger.info(f"Alert: {ticket_count} tickets with '{group['issue_type']}'")
-            if send_slack_notification(group):
-                alerts_sent += 1
+            logger.info(f"Qualifying group: {ticket_count} tickets with '{group['issue_type']}'")
+            qualifying_groups.append(group)
+            total_tickets += ticket_count
+        else:
+            logger.info(f"Skipping alert for '{group['issue_type']}' - {ticket_count} tickets < {threshold} threshold")
     
-    logger.info(f"Check complete. Sent {alerts_sent} alerts")
+    # Send consolidated alert if we have qualifying groups
+    if qualifying_groups:
+        logger.info(f"Sending consolidated alert for {len(qualifying_groups)} groups with {total_tickets} total tickets")
+        
+        # Create consolidated notification payload
+        consolidated_alert = {
+            'issue_type': 'Multiple Issue Groups Detected',
+            'groups': qualifying_groups,
+            'total_tickets': total_tickets,
+            'summary': f"Found {len(qualifying_groups)} groups of similar issues affecting {total_tickets} tickets"
+        }
+        
+        if send_slack_notification(consolidated_alert):
+            logger.info("✓ Consolidated alert sent successfully")
+        else:
+            logger.error("✗ Failed to send consolidated alert")
+    else:
+        logger.info("No qualifying groups found - no alerts sent")
+    
+    logger.info(f"Check complete. Groups analyzed: {len(similar_groups)}, Groups alerted: {len(qualifying_groups)}")
 
 def run_once():
     """Run a single check without scheduling"""
