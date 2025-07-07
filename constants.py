@@ -74,13 +74,13 @@ OPENAI_MODEL = "gpt-4.1-2025-04-14"
 OPENAI_TEMPERATURE = 0.2
 OPENAI_MAX_TOKENS_CLUSTERING = 20000
 OPENAI_MAX_TOKENS_QUERY = 20000
+SYSTEM_MESSAGE = "You are a technical support analyst who specializes in analyzing customer support tickets."
 
-# Slack Message Limits
-SLACK_MAX_TEXT_LENGTH = 3000  # Slack blocks have text limits
-SLACK_MAX_BLOCKS = 50  # Slack message block limit0
+# Slack Configuration
+SLACK_MAX_TEXT_LENGTH = 3000
+SLACK_MAX_BLOCKS = 50
 
-
-# Custom Field Mapping (Field ID -> Key Name)
+# Zendesk Custom Field Mapping (Field ID -> Key Name)
 CUSTOM_FIELD_MAP = {
     31731966344603: 'internal_chart_tool_ai_tagged',
     31733696813723: 'internal_chart_tool_ai_generated',
@@ -92,29 +92,23 @@ CUSTOM_FIELD_MAP = {
     360002325512: 'jira_ticket_id',
     9870708900891: 'link_to_discourse',
     114101027932: 'internal_chart_tool',
-    9870197721883: 'numeric_org_id',  # Organization ID field
-    24388397: 'assignee',  # Assignee field
+    9870197721883: 'numeric_org_id',
+    24388397: 'assignee',
 }
 
-# System Message for OpenAI
-SYSTEM_MESSAGE = "You are a technical support analyst who specializes in analyzing customer support tickets."
-
-# Ticket Analysis Constants
+# Analysis Configuration
 MIN_TICKETS_FOR_GROUP = 5
 TICKET_FETCH_HOURS = 24
+LARGE_RESULT_THRESHOLD = 20
 
-# Environment Variable Names
+# Time Window Configuration
+MAX_LOOKBACK_HOURS = 24 * 60  # 2 months (60 days)
+DEFAULT_QUERY_HOURS = 24
+
+# Environment Variables
 REQUIRED_ENV_VARS = ['ZENDESK_URL', 'ZENDESK_EMAIL', 'ZENDESK_TOKEN', 'OPENAI_API_KEY']
 OPTIONAL_ENV_VARS = ['SLACK_WEBHOOK_URL', 'TICKET_CNT_THRESHOLD', 'SEND_TEST_SLACK']
 
-# Time Window Constants
-MAX_LOOKBACK_HOURS = 24 * 60  # 2 months (60 days)
-DEFAULT_QUERY_HOURS = 24  # Default to 24 hours if no time window specified
-
-# Large Result Set Constants
-LARGE_RESULT_THRESHOLD = 20  # Switch to simplified format when results exceed this number
-
-# External Links Configuration
-JIRA_BASE_URL = "https://amplitude.atlassian.net/browse"  # Customize for your JIRA instance
-
+# External Services
+JIRA_BASE_URL = "https://amplitude.atlassian.net/browse"
 DEFAULT_SEND_TEST_SLACK = False

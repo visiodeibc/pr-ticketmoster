@@ -10,7 +10,7 @@ import logging
 import sys
 from dotenv import load_dotenv
 from zendesk_client import ZendeskClient, fetch_recent_tickets
-from ticket_analyzer import analyze_similar_tickets, analyze_tickets_with_query
+from ticket_analyzer import analyze_similar_tickets
 from slack_notifier import send_slack_notification
 import requests
 from constants import (

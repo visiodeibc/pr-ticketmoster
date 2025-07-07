@@ -2,21 +2,13 @@ import os
 import openai
 import json
 import logging
+import re
 from collections import defaultdict
 from dotenv import load_dotenv
 from constants import (
-    OPENAI_CLUSTERING_FORMAT, 
-    OPENAI_QUERY_FORMAT,
-    OPENAI_MODEL,
-    OPENAI_TEMPERATURE,
-    OPENAI_MAX_TOKENS_CLUSTERING,
-    OPENAI_MAX_TOKENS_QUERY,
-    MIN_TICKETS_FOR_GROUP,
-    SYSTEM_MESSAGE,
-    OPENAI_TIME_WINDOW_FORMAT,
-    MAX_LOOKBACK_HOURS,
-    DEFAULT_QUERY_HOURS,
-    LARGE_RESULT_THRESHOLD
+    OPENAI_CLUSTERING_FORMAT, OPENAI_QUERY_FORMAT, OPENAI_TIME_WINDOW_FORMAT,
+    OPENAI_MODEL, OPENAI_TEMPERATURE, OPENAI_MAX_TOKENS_CLUSTERING, OPENAI_MAX_TOKENS_QUERY,
+    MIN_TICKETS_FOR_GROUP, SYSTEM_MESSAGE, MAX_LOOKBACK_HOURS, DEFAULT_QUERY_HOURS, LARGE_RESULT_THRESHOLD
 )
 
 load_dotenv()
@@ -71,20 +63,15 @@ def call_openai_api(messages, max_tokens, analysis_type="analysis"):
 def parse_openai_response(response_text, expected_type="unknown"):
     """Parse OpenAI response with unified error handling"""
     try:
-        # Clean markdown code blocks if present
         cleaned = response_text.strip()
         if cleaned.startswith("```"):
             cleaned = cleaned.strip('`').strip()
             if cleaned.lower().startswith("json"):
                 cleaned = cleaned[4:].lstrip('\n').lstrip()
         
-        # Remove JavaScript-style comments that OpenAI sometimes adds
-        import re
-        # Remove single-line comments (// comment)
+        # Remove JavaScript-style comments and trailing commas
         cleaned = re.sub(r'//.*?(?=\n|$)', '', cleaned)
-        # Remove multi-line comments (/* comment */)
         cleaned = re.sub(r'/\*.*?\*/', '', cleaned, flags=re.DOTALL)
-        # Clean up any trailing commas before closing brackets/braces
         cleaned = re.sub(r',(\s*[}\]])', r'\1', cleaned)
         
         logger.info(f"Cleaned OpenAI response for JSON parsing: {cleaned[:200]}...")
@@ -149,7 +136,6 @@ def cluster_with_openai(tickets):
         ticket_ids = group.get('ticket_ids', [])
         logger.info(f"Processing group '{group.get('issue_type')}' with {len(ticket_ids)} tickets")
         
-        # Find matching tickets
         matching_tickets = [t for t in tickets if str(t['id']) in ticket_ids]
         
         if len(matching_tickets) >= MIN_TICKETS_FOR_GROUP:
@@ -163,10 +149,6 @@ def cluster_with_openai(tickets):
             logger.info(f"Skipping group '{group.get('issue_type')}' as it has fewer than {MIN_TICKETS_FOR_GROUP} tickets")
     
     return similar_groups
-
-def analyze_tickets_with_query(tickets, query):
-    """Deprecated: Use analyze_tickets_with_query_and_timeframe instead"""
-    return analyze_tickets_with_query_and_timeframe(tickets, query)
 
 def analyze_tickets_with_query_and_timeframe(tickets, query, custom_timeframe=None):
     """Analyze tickets with a custom query using OpenAI, with support for dynamic time windows"""
@@ -256,8 +238,6 @@ def clean_time_references_from_query(query, time_window_info):
     if not time_window_info.get("has_time_reference", False):
         return query
     
-    import re
-    
     # Common time reference patterns to remove
     time_patterns = [
         r'\b(in the )?(past|last|previous)\s+(hour|day|week|month|year)s?\b',
@@ -276,10 +256,10 @@ def clean_time_references_from_query(query, time_window_info):
     for pattern in time_patterns:
         cleaned_query = re.sub(pattern, '', cleaned_query, flags=re.IGNORECASE)
     
-    # Clean up extra whitespace and prepositions left behind
-    cleaned_query = re.sub(r'\s+', ' ', cleaned_query)  # Multiple spaces to single
-    cleaned_query = re.sub(r'\s+(in|of|for|about|with|from)\s+', r' \1 ', cleaned_query)  # Fix spacing around prepositions
-    cleaned_query = re.sub(r'^\s*(in|of|for|about|with|from)\s+', '', cleaned_query, flags=re.IGNORECASE)  # Remove leading prepositions
+    # Clean up extra whitespace and prepositions
+    cleaned_query = re.sub(r'\s+', ' ', cleaned_query)
+    cleaned_query = re.sub(r'\s+(in|of|for|about|with|from)\s+', r' \1 ', cleaned_query)
+    cleaned_query = re.sub(r'^\s*(in|of|for|about|with|from)\s+', '', cleaned_query, flags=re.IGNORECASE)
     cleaned_query = cleaned_query.strip()
     
     # Ensure we don't return an empty query
@@ -287,7 +267,6 @@ def clean_time_references_from_query(query, time_window_info):
         logger.warning("Query became empty after time reference cleaning, using original")
         return query
     
-    # Log the cleaning if significant changes were made
     if cleaned_query != query:
         logger.info(f"Cleaned query: '{query}' → '{cleaned_query}'")
     
@@ -311,12 +290,7 @@ def extract_time_window_from_query(query):
     """Extract time window information from user query using OpenAI"""
     if not query:
         logger.warning("No query provided for time window extraction")
-        return {
-            "has_time_reference": False,
-            "hours": DEFAULT_QUERY_HOURS,
-            "description": f"last {DEFAULT_QUERY_HOURS} hours",
-            "reasoning": "No query provided"
-        }
+        return create_default_time_window("No query provided")
     
     logger.info(f"Extracting time window from query: {query}")
     
@@ -356,12 +330,7 @@ def extract_time_window_from_query(query):
     
     result, success = call_openai_api(messages, 1000, "time window extraction")
     if not success:
-        return {
-            "has_time_reference": False,
-            "hours": DEFAULT_QUERY_HOURS,
-            "description": f"last {DEFAULT_QUERY_HOURS} hours",
-            "reasoning": "OpenAI API key not available"
-        }
+        return create_default_time_window("OpenAI API key not available")
     
     try:
         parsed_result = json.loads(result)
@@ -390,12 +359,16 @@ def extract_time_window_from_query(query):
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse time window JSON response: {e}")
         logger.error(f"Raw response: {result}")
-        return {
-            "has_time_reference": False,
-            "hours": DEFAULT_QUERY_HOURS,
-            "description": f"last {DEFAULT_QUERY_HOURS} hours",
-            "reasoning": f"Failed to parse OpenAI response: {e}"
-        }
+        return create_default_time_window(f"Failed to parse OpenAI response: {e}")
+
+def create_default_time_window(reason):
+    """Create default time window configuration"""
+    return {
+        "has_time_reference": False,
+        "hours": DEFAULT_QUERY_HOURS,
+        "description": f"last {DEFAULT_QUERY_HOURS} hours",
+        "reasoning": reason
+    }
 
 def enrich_response_with_org_data(parsed_data, original_tickets):
     """Enrich OpenAI response with ticket data from original Zendesk tickets"""
@@ -408,7 +381,7 @@ def enrich_response_with_org_data(parsed_data, original_tickets):
     # Handle groups format (new unified format)
     if 'groups' in data and data['groups']:
         enriched_groups = []
-        total_tickets_for_org_summary = []
+        all_ticket_ids = []
         
         for group in data['groups']:
             enriched_group = group.copy()
@@ -419,15 +392,15 @@ def enrich_response_with_org_data(parsed_data, original_tickets):
             
             # Collect ticket IDs for org summary
             if 'ticket_ids' in group:
-                total_tickets_for_org_summary.extend(group['ticket_ids'])
+                all_ticket_ids.extend(group['ticket_ids'])
             
             enriched_groups.append(enriched_group)
         
         data['groups'] = enriched_groups
         
         # Create org summary for large result sets
-        if parsed_data.get('large_result_set', False) and total_tickets_for_org_summary:
-            add_org_summary_to_metadata(parsed_data, total_tickets_for_org_summary, ticket_lookup)
+        if parsed_data.get('large_result_set', False) and all_ticket_ids:
+            add_org_summary_to_metadata(parsed_data, all_ticket_ids, ticket_lookup)
     
     # Handle legacy tickets format for backwards compatibility
     elif 'tickets' in data and data['tickets']:
@@ -485,4 +458,6 @@ def add_org_summary_to_metadata(parsed_data, ticket_ids, ticket_lookup):
         if 'metadata' not in parsed_data:
             parsed_data['metadata'] = {}
         parsed_data['metadata']['organizations'] = org_summary
-        logger.info(f"Added organization summary for large result set: {len(org_summary)} orgs") 
+        logger.info(f"Added organization summary for large result set: {len(org_summary)} orgs")
+
+ 

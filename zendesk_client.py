@@ -1,9 +1,7 @@
 import os
-import json
 import logging
 from datetime import datetime, timedelta, timezone
 from zenpy import Zenpy
-from zenpy.lib.api_objects import Ticket
 from dotenv import load_dotenv
 from constants import CUSTOM_FIELD_MAP, TICKET_FETCH_HOURS
 
@@ -12,58 +10,41 @@ load_dotenv()
 # Configure logging
 logger = logging.getLogger('zendesk_client')
 
+# Product tag mapping
+PRODUCT_TAGS = {
+    'web_portal': 'WebPortal', 'webportal': 'WebPortal',
+    'mobile_app': 'MobileApp', 'mobile': 'MobileApp',
+    'reporting': 'ReportingTool', 'reports': 'ReportingTool',
+    'dashboard': 'Dashboard', 'billing': 'Billing', 'api': 'API'
+}
+
 class ZendeskClient:
     def __init__(self):
         """Initialize Zendesk client with credentials from environment variables"""
-        self.zendesk_url = os.environ.get('ZENDESK_URL')  # e.g., 'https://yourcompany.zendesk.com'
-        self.zendesk_email = os.environ.get('ZENDESK_EMAIL')  # Your Zendesk email
-        self.zendesk_token = os.environ.get('ZENDESK_TOKEN')  # Your API token
+        self.zendesk_url = os.environ.get('ZENDESK_URL')
+        self.zendesk_email = os.environ.get('ZENDESK_EMAIL')
+        self.zendesk_token = os.environ.get('ZENDESK_TOKEN')
         
         if not all([self.zendesk_url, self.zendesk_email, self.zendesk_token]):
-            logger.error("Missing Zendesk credentials. Please set ZENDESK_URL, ZENDESK_EMAIL, and ZENDESK_TOKEN environment variables.")
-            logger.error("Example values:")
-            logger.error("  ZENDESK_URL=https://yourcompany.zendesk.com")
-            logger.error("  ZENDESK_EMAIL=your-email@company.com")
-            logger.error("  ZENDESK_TOKEN=your_api_token_here")
+            logger.error("Missing Zendesk credentials: ZENDESK_URL, ZENDESK_EMAIL, ZENDESK_TOKEN")
             self.client = None
             return
             
-        # Validate URL format
         if not (self.zendesk_url.startswith('http://') or self.zendesk_url.startswith('https://')):
             logger.error(f"Invalid ZENDESK_URL format: {self.zendesk_url}")
-            logger.error("URL should start with https:// (e.g., https://yourcompany.zendesk.com)")
             self.client = None
             return
         
         try:
-            # Extract subdomain from URL more robustly
-            # Remove protocol and trailing slashes
-            clean_url = self.zendesk_url.replace('https://', '').replace('http://', '').rstrip('/')
-            logger.info(f"Processing Zendesk URL: {clean_url}")
+            domain = self._extract_subdomain()
+            if not domain:
+                raise ValueError(f"Could not extract subdomain from URL: {self.zendesk_url}")
             
-            # Extract subdomain (everything before .zendesk.*)
-            if '.zendesk.' in clean_url:
-                domain = clean_url.split('.zendesk.')[0]
-            else:
-                # If URL doesn't contain .zendesk., assume it's just the subdomain
-                domain = clean_url.split('.')[0]
-            
-            logger.info(f"Extracted Zendesk subdomain: '{domain}'")
-            
-            if not domain or domain == clean_url:
-                raise ValueError(f"Could not extract valid subdomain from URL: {self.zendesk_url}. Expected format: https://yourcompany.zendesk.com")
-            
-            # Initialize Zenpy client
-            self.client = Zenpy(
-                subdomain=domain,  # Use 'subdomain' parameter instead of 'domain'
-                email=self.zendesk_email,
-                token=self.zendesk_token
-            )
+            self.client = Zenpy(subdomain=domain, email=self.zendesk_email, token=self.zendesk_token)
             logger.info("Successfully initialized Zendesk client")
             
-            # Test connection by making a simple API call
+            # Test connection
             try:
-                # Try to get user info to verify connection
                 user = self.client.users.me()
                 logger.info(f"✓ Connected to Zendesk as: {user.email}")
             except Exception as test_e:
@@ -71,82 +52,48 @@ class ZendeskClient:
                 
         except Exception as e:
             logger.error(f"Failed to initialize Zendesk client: {e}")
-            logger.error(f"Make sure your ZENDESK_URL is in the format: https://yourcompany.zendesk.com")
             self.client = None
 
-    def fetch_tickets_last_24h(self):
-        """
-        Fetch tickets created in the last 24 hours from Zendesk
+    def _extract_subdomain(self):
+        """Extract subdomain from Zendesk URL"""
+        clean_url = self.zendesk_url.replace('https://', '').replace('http://', '').rstrip('/')
+        logger.info(f"Processing Zendesk URL: {clean_url}")
         
-        Returns:
-            list: List of ticket dictionaries in our expected format
-        """
+        if '.zendesk.' in clean_url:
+            domain = clean_url.split('.zendesk.')[0]
+        else:
+            domain = clean_url.split('.')[0]
+        
+        logger.info(f"Extracted Zendesk subdomain: '{domain}'")
+        return domain if domain and domain != clean_url else None
+
+    def fetch_tickets_last_24h(self):
+        """Fetch tickets created in the last 24 hours from Zendesk"""
         return self.fetch_tickets_by_hours(TICKET_FETCH_HOURS)
     
     def fetch_tickets_by_hours(self, hours=None):
-        """
-        Fetch tickets created in the last N hours from Zendesk
-        
-        Args:
-            hours (int, optional): Number of hours to look back. Defaults to TICKET_FETCH_HOURS
-            
-        Returns:
-            list: List of ticket dictionaries in our expected format
-        """
+        """Fetch tickets created in the last N hours from Zendesk"""
         if not self.client:
             logger.error("Zendesk client not initialized. Cannot fetch tickets.")
             return []
         
-        if hours is None:
-            hours = TICKET_FETCH_HOURS
+        hours = hours or TICKET_FETCH_HOURS
         
         try:
-            # Calculate hours ago based on parameter
             now = datetime.now(timezone.utc)
             cutoff = now - timedelta(hours=hours)
             
             logger.info(f"Fetching tickets created after {cutoff.isoformat()} ({hours} hours ago)")
             
-            # Use Zendesk search API to get tickets from last period
-            # Format: created>YYYY-MM-DD type:ticket
             search_query = f"created>{cutoff.strftime('%Y-%m-%d')} type:ticket"
-            
             logger.info(f"Zendesk search query: {search_query}")
             
-            # Fetch tickets using search
             tickets = []
             for ticket in self.client.search(query=search_query, type='ticket'):
-                # Convert ticket creation time to timezone-aware datetime
-                
-                if hasattr(ticket, 'created_at') and ticket.created_at:
-                    try:
-                        ticket_date = ticket.created_at
-                        
-                        # Handle different date formats from Zendesk
-                        if isinstance(ticket_date, str):
-                            # Parse ISO format string
-                            ticket_date = datetime.fromisoformat(ticket_date.replace('Z', '+00:00'))
-                        elif hasattr(ticket_date, 'tzinfo') and ticket_date.tzinfo is None:
-                            # Add UTC timezone if missing
-                            ticket_date = ticket_date.replace(tzinfo=timezone.utc)
-                        
-                        logger.debug(f"Ticket #{ticket.id} created at {ticket_date.isoformat()}")
-                        
-                        # Only include tickets from the last period
-                        if ticket_date >= cutoff:
-                            ticket_data = self._convert_ticket_format(ticket)
-                            tickets.append(ticket_data)
-                            logger.debug(f"✓ Added ticket #{ticket.id}: {ticket.subject}")
-                        else:
-                            logger.debug(f"Skipping older ticket #{ticket.id} ({ticket_date.isoformat()})")
-                    except Exception as date_e:
-                        logger.error(f"Error processing date for ticket #{ticket.id}: {date_e}")
-                        logger.debug(f"Raw created_at value: {ticket.created_at}, type: {type(ticket.created_at)}")
-                        # Still add the ticket but log the issue
-                        ticket_data = self._convert_ticket_format(ticket)
-                        tickets.append(ticket_data)
-                else:
-                    logger.warning(f"Ticket #{ticket.id} has no creation date")
+                if self._is_ticket_in_timeframe(ticket, cutoff):
+                    ticket_data = self._convert_ticket_format(ticket)
+                    tickets.append(ticket_data)
+                    logger.debug(f"✓ Added ticket #{ticket.id}: {ticket.subject}")
             
             logger.info(f"Fetched {len(tickets)} tickets from Zendesk (last {hours} hours)")
             return tickets
@@ -154,17 +101,38 @@ class ZendeskClient:
         except Exception as e:
             logger.error(f"Error fetching tickets from Zendesk: {e}")
             return []
+
+    def _is_ticket_in_timeframe(self, ticket, cutoff):
+        """Check if ticket is within the specified timeframe"""
+        if not hasattr(ticket, 'created_at') or not ticket.created_at:
+            logger.warning(f"Ticket #{ticket.id} has no creation date")
+            return True  # Include tickets without dates
+        
+        try:
+            ticket_date = self._parse_ticket_date(ticket.created_at)
+            logger.debug(f"Ticket #{ticket.id} created at {ticket_date.isoformat()}")
+            
+            if ticket_date >= cutoff:
+                return True
+            else:
+                logger.debug(f"Skipping older ticket #{ticket.id} ({ticket_date.isoformat()})")
+                return False
+                
+        except Exception as date_e:
+            logger.error(f"Error processing date for ticket #{ticket.id}: {date_e}")
+            logger.debug(f"Raw created_at value: {ticket.created_at}, type: {type(ticket.created_at)}")
+            return True  # Include tickets with date parsing issues
+
+    def _parse_ticket_date(self, created_at):
+        """Parse ticket creation date to timezone-aware datetime"""
+        if isinstance(created_at, str):
+            return datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+        elif hasattr(created_at, 'tzinfo') and created_at.tzinfo is None:
+            return created_at.replace(tzinfo=timezone.utc)
+        return created_at
     
     def _convert_ticket_format(self, zendesk_ticket):
-        """
-        Convert Zendesk ticket object to our expected format
-        
-        Args:
-            zendesk_ticket: Zenpy ticket object
-            
-        Returns:
-            dict: Ticket in our expected format
-        """
+        """Convert Zendesk ticket object to our expected format"""
         # Handle created_at date conversion
         created_at_iso = None
         if zendesk_ticket.created_at:
@@ -177,16 +145,8 @@ class ZendeskClient:
                 logger.warning(f"Could not convert created_at for ticket #{zendesk_ticket.id}: {e}")
                 created_at_iso = str(zendesk_ticket.created_at)
         
-        # Extract custom fields by ID
-        custom_field_map = CUSTOM_FIELD_MAP
-        custom_field_values = {v: None for v in custom_field_map.values()}
-        if hasattr(zendesk_ticket, 'custom_fields') and zendesk_ticket.custom_fields:
-            for field in zendesk_ticket.custom_fields:
-                if field['id'] in custom_field_map:
-                    key = custom_field_map[field['id']]
-                    custom_field_values[key] = field.get('value')
-        # Optionally log extracted custom fields
-        logger.debug(f"Extracted custom fields for ticket #{zendesk_ticket.id}: {custom_field_values}")
+        # Extract custom fields
+        custom_field_values = self._extract_custom_fields(zendesk_ticket)
         
         return {
             'id': zendesk_ticket.id,
@@ -199,59 +159,36 @@ class ZendeskClient:
             'product': self._extract_product_from_tags(zendesk_ticket.tags) if zendesk_ticket.tags else 'Unknown',
             **custom_field_values
         }
+
+    def _extract_custom_fields(self, zendesk_ticket):
+        """Extract custom fields from Zendesk ticket"""
+        custom_field_values = {v: None for v in CUSTOM_FIELD_MAP.values()}
+        
+        if hasattr(zendesk_ticket, 'custom_fields') and zendesk_ticket.custom_fields:
+            for field in zendesk_ticket.custom_fields:
+                if field['id'] in CUSTOM_FIELD_MAP:
+                    key = CUSTOM_FIELD_MAP[field['id']]
+                    custom_field_values[key] = field.get('value')
+        
+        logger.debug(f"Extracted custom fields for ticket #{zendesk_ticket.id}: {custom_field_values}")
+        return custom_field_values
     
     def _extract_product_from_tags(self, tags):
-        """
-        Extract product information from ticket tags
-        
-        Args:
-            tags: List of ticket tags
-            
-        Returns:
-            str: Product name or 'Unknown'
-        """
-        # Common product tags - customize based on your Zendesk setup
-        product_tags = {
-            'web_portal': 'WebPortal',
-            'webportal': 'WebPortal',
-            'mobile_app': 'MobileApp',
-            'mobile': 'MobileApp',
-            'reporting': 'ReportingTool',
-            'reports': 'ReportingTool',
-            'dashboard': 'Dashboard',
-            'billing': 'Billing',
-            'api': 'API'
-        }
-        
+        """Extract product information from ticket tags"""
         for tag in tags:
-            tag_lower = tag.lower()
-            if tag_lower in product_tags:
-                return product_tags[tag_lower]
-        
+            if tag.lower() in PRODUCT_TAGS:
+                return PRODUCT_TAGS[tag.lower()]
         return 'Unknown'
 
 # Initialize global client instance
 zendesk_client = ZendeskClient()
 
 def fetch_recent_tickets():
-    """
-    Public function to fetch recent tickets from Zendesk
-    
-    Returns:
-        list: List of tickets from the last 24 hours
-    """
+    """Fetch recent tickets from Zendesk (last 24 hours)"""
     return zendesk_client.fetch_tickets_last_24h()
 
 def fetch_recent_tickets_by_hours(hours=None):
-    """
-    Public function to fetch recent tickets from Zendesk with custom time window
-    
-    Args:
-        hours (int, optional): Number of hours to look back. Defaults to TICKET_FETCH_HOURS
-        
-    Returns:
-        list: List of tickets from the specified time window
-    """
+    """Fetch recent tickets from Zendesk with custom time window"""
     return zendesk_client.fetch_tickets_by_hours(hours)
 
  
