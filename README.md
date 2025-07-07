@@ -67,17 +67,17 @@ python app.py --help           # Show all available commands
 
 ```bash
 # Run all tests
-python checker.py
+python test.py
 
 # Test specific components
-python checker.py env          # Environment variables
-python checker.py zendesk      # Zendesk API connection
-python checker.py analysis     # Ticket analysis with sample data
-python checker.py slack        # Slack notifications
-python checker.py fields       # List all available Zendesk fields
+python test.py env          # Environment variables
+python test.py zendesk      # Zendesk API connection
+python test.py analysis     # Ticket analysis with sample data
+python test.py slack        # Slack notifications
+python test.py fields       # List all available Zendesk fields
 
 # Test with Slack notifications enabled
-SEND_TEST_SLACK=true python checker.py slack
+SEND_TEST_SLACK=true python test.py slack
 ```
 
 ## Features
@@ -125,7 +125,7 @@ SEND_TEST_SLACK=true python checker.py slack
 ## Files
 
 - `app.py` - **Main application** with scheduler, pattern detection, and custom query analysis
-- `checker.py` - **Testing tool** for debugging and validating system components
+- `test.py` - **Testing tool** for debugging and validating system components
 - `zendesk_client.py` - Zendesk API integration with custom field extraction
 - `ticket_analyzer.py` - OpenAI-powered analysis with unified JSON format
 - `slack_notifier.py` - Enhanced Slack webhook notifications
