@@ -156,8 +156,8 @@ def analyze_tickets_with_query_and_timeframe(tickets, query, custom_timeframe=No
         logger.info("No query provided for analysis")
         return None, "No query provided.", None
     
-    # Extract or use provided time window
-    time_window_info = custom_timeframe or extract_time_window_from_query(query)
+    # Extract time window and get cleaned query from OpenAI
+    time_window_info = custom_timeframe or extract_time_window_and_clean_query(query)
     logger.info(f"Using time window: {time_window_info}")
     
     # Fetch tickets based on time window
@@ -168,8 +168,8 @@ def analyze_tickets_with_query_and_timeframe(tickets, query, custom_timeframe=No
     
     logger.info(f"Analyzing {len(tickets)} tickets with custom query: {query}")
     
-    # Clean time references from query to avoid influencing content analysis
-    cleaned_query = clean_time_references_from_query(query, time_window_info)
+    # Use cleaned query from OpenAI (more accurate than regex)
+    cleaned_query = time_window_info.get("cleaned_query", query)
     
     # Prepare data and make API call
     ticket_texts = prepare_ticket_texts(tickets)
@@ -233,44 +233,7 @@ def analyze_tickets_with_query_and_timeframe(tickets, query, custom_timeframe=No
     logger.info(f"Parsed query response successfully. Enhanced summary: {enhanced_summary}")
     return parsed_data, enhanced_summary, time_window_info
 
-def clean_time_references_from_query(query, time_window_info):
-    """Remove time-related phrases from query to avoid influencing content analysis"""
-    if not time_window_info.get("has_time_reference", False):
-        return query
-    
-    # Common time reference patterns to remove
-    time_patterns = [
-        r'\b(in the )?(past|last|previous)\s+(hour|day|week|month|year)s?\b',
-        r'\b(in the )?(past|last|previous)\s+\d+\s+(hour|day|week|month|year)s?\b',
-        r'\b(yesterday|today)\b',
-        r'\b(in the )?(last|past)\s+\d+\s*(h|hr|hours?|d|days?|w|weeks?|m|months?|y|years?)\b',
-        r'\b(this|last)\s+(week|month|year)\b',
-        r'\b\d+\s*(hour|day|week|month|year)s?\s+(ago)\b',
-        r'\bwithin\s+(the\s+)?(last|past)\s+\d*\s*(hour|day|week|month|year)s?\b',
-        r'\bover\s+(the\s+)?(last|past)\s+\d*\s*(hour|day|week|month|year)s?\b',
-        r'\bduring\s+(the\s+)?(last|past)\s+\d*\s*(hour|day|week|month|year)s?\b',
-        r'\bfrom\s+(the\s+)?(last|past)\s+\d*\s*(hour|day|week|month|year)s?\b'
-    ]
-    
-    cleaned_query = query
-    for pattern in time_patterns:
-        cleaned_query = re.sub(pattern, '', cleaned_query, flags=re.IGNORECASE)
-    
-    # Clean up extra whitespace and prepositions
-    cleaned_query = re.sub(r'\s+', ' ', cleaned_query)
-    cleaned_query = re.sub(r'\s+(in|of|for|about|with|from)\s+', r' \1 ', cleaned_query)
-    cleaned_query = re.sub(r'^\s*(in|of|for|about|with|from)\s+', '', cleaned_query, flags=re.IGNORECASE)
-    cleaned_query = cleaned_query.strip()
-    
-    # Ensure we don't return an empty query
-    if not cleaned_query:
-        logger.warning("Query became empty after time reference cleaning, using original")
-        return query
-    
-    if cleaned_query != query:
-        logger.info(f"Cleaned query: '{query}' → '{cleaned_query}'")
-    
-    return cleaned_query
+
 
 def get_tickets_for_timeframe(tickets, time_window_info, custom_timeframe):
     """Get appropriate tickets based on time window information"""
@@ -286,28 +249,37 @@ def get_tickets_for_timeframe(tickets, time_window_info, custom_timeframe):
             return fetch_recent_tickets_by_hours(DEFAULT_QUERY_HOURS)
         return tickets
 
-def extract_time_window_from_query(query):
-    """Extract time window information from user query using OpenAI"""
+def extract_time_window_and_clean_query(query):
+    """Extract time window information and clean query using OpenAI"""
     if not query:
         logger.warning("No query provided for time window extraction")
-        return create_default_time_window("No query provided")
+        return create_default_time_window("No query provided", query)
     
-    logger.info(f"Extracting time window from query: {query}")
+    logger.info(f"Extracting time window and cleaning query: {query}")
     
     prompt = f"""
-    Analyze the following user query and determine if it contains any time references (like "last week", "yesterday", "past 3 days", "previous month", etc.).
+    Analyze the following user query and perform two tasks:
+    
+    1. Extract any time references (like "last week", "yesterday", "past 3 days", "previous month", etc.)
+    2. Remove time references from the query while preserving the core question
     
     Query: "{query}"
     
-    If there is a time reference, convert it to hours and provide a human-readable description.
-    If there is no time reference, set has_time_reference to false and use the default.
+    For time extraction:
+    - If there is a time reference, convert it to hours and provide a human-readable description
+    - If there is no time reference, set has_time_reference to false and use the default
+    - Maximum lookback allowed: {MAX_LOOKBACK_HOURS} hours ({MAX_LOOKBACK_HOURS // 24} days)
+    - Default time window: {DEFAULT_QUERY_HOURS} hours
     
-    Maximum lookback allowed: {MAX_LOOKBACK_HOURS} hours ({MAX_LOOKBACK_HOURS // 24} days)
-    Default time window: {DEFAULT_QUERY_HOURS} hours
+    For query cleaning:
+    - Remove phrases like "last week", "in the past month", "yesterday", etc.
+    - Keep the core question about ticket content, issues, or analysis
+    - Ensure the cleaned query is grammatically correct and meaningful
+    - If removing time references would make the query empty or unclear, keep essential context
     
-    Common conversions:
+    Common time conversions:
     - "last hour" = 1 hour
-    - "last 24 hours" / "yesterday" = 24 hours
+    - "last 24 hours" / "yesterday" = 24 hours  
     - "last 2 days" = 48 hours
     - "last week" = 168 hours (7 days)
     - "last month" = 720 hours (30 days)
@@ -319,7 +291,7 @@ def extract_time_window_from_query(query):
     IMPORTANT: 
     - If the requested time window exceeds the maximum lookback ({MAX_LOOKBACK_HOURS} hours), cap it at the maximum
     - Be conservative with ambiguous time references
-    - Provide clear reasoning for your decision
+    - Ensure cleaned_query is meaningful and actionable for ticket analysis
     - Return ONLY valid JSON without any comments, explanations, or additional text
     """
     
@@ -328,18 +300,19 @@ def extract_time_window_from_query(query):
         {"role": "user", "content": prompt}
     ]
     
-    result, success = call_openai_api(messages, 1000, "time window extraction")
+    result, success = call_openai_api(messages, 1000, "time window and query cleaning")
     if not success:
-        return create_default_time_window("OpenAI API key not available")
+        return create_default_time_window("OpenAI API key not available", query)
     
     try:
         parsed_result = json.loads(result)
-        logger.info(f"Successfully parsed time window: {parsed_result}")
+        logger.info(f"Successfully parsed time window and cleaned query: {parsed_result}")
         
         # Extract and validate time window information
         has_time_reference = parsed_result.get("has_time_reference", False)
         hours = parsed_result.get("time_window", {}).get("hours", DEFAULT_QUERY_HOURS)
         description = parsed_result.get("time_window", {}).get("description", f"last {hours} hours")
+        cleaned_query = parsed_result.get("cleaned_query", query)
         reasoning = parsed_result.get("reasoning", "Extracted from query")
         
         # Ensure hours is within bounds
@@ -349,24 +322,34 @@ def extract_time_window_from_query(query):
             description = f"last {MAX_LOOKBACK_HOURS // 24} days (capped at maximum)"
             reasoning += f" (capped at maximum lookback of {MAX_LOOKBACK_HOURS} hours)"
         
+        # Validate cleaned query
+        if not cleaned_query or cleaned_query.strip() == "":
+            logger.warning("OpenAI returned empty cleaned query, using original")
+            cleaned_query = query
+        
+        if cleaned_query != query:
+            logger.info(f"OpenAI cleaned query: '{query}' → '{cleaned_query}'")
+        
         return {
             "has_time_reference": has_time_reference,
             "hours": hours,
             "description": description,
+            "cleaned_query": cleaned_query,
             "reasoning": reasoning
         }
         
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse time window JSON response: {e}")
         logger.error(f"Raw response: {result}")
-        return create_default_time_window(f"Failed to parse OpenAI response: {e}")
+        return create_default_time_window(f"Failed to parse OpenAI response: {e}", query)
 
-def create_default_time_window(reason):
+def create_default_time_window(reason, query=""):
     """Create default time window configuration"""
     return {
         "has_time_reference": False,
         "hours": DEFAULT_QUERY_HOURS,
         "description": f"last {DEFAULT_QUERY_HOURS} hours",
+        "cleaned_query": query,
         "reasoning": reason
     }
 

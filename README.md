@@ -1,6 +1,6 @@
 # Zendesk Alert System
 
-A streamlined system that monitors Zendesk tickets for similar issues and sends Slack alerts when patterns are detected. Features AI-powered analysis and custom query capabilities.
+A streamlined system that monitors Zendesk tickets for similar issues and sends Slack alerts when patterns are detected. Features AI-powered analysis, custom query capabilities, and flexible monitoring options.
 
 ## Quick Setup
 
@@ -30,31 +30,40 @@ A streamlined system that monitors Zendesk tickets for similar issues and sends 
 
 ## Usage
 
-### Run Once (Single Check)
+### Main Application
+
+**Run Once (Single Check):**
 
 ```bash
-python app.py --once
+python app.py                    # Default: single check
+python app.py --once            # Explicit single check
 ```
 
-### Run Continuous Monitoring (Hourly Checks)
+**Continuous Monitoring:**
 
 ```bash
-python app.py
+python app.py --monitor         # Hourly checks with scheduler
 ```
 
-### Custom Query Analysis
-
+**Custom Query Analysis:**
 Analyze tickets with custom questions and get AI-powered insights:
 
 ```bash
 # Ask specific questions about your tickets
-python checker.py query "How many login related tickets do we have?"
-python checker.py query "What are the most common SDK issues?"
-python checker.py query "Which tickets mention billing problems?"
-python checker.py query "Summarize all high priority tickets"
+python app.py --query "How many login related tickets do we have?"
+python app.py --query "What are the most common SDK issues?"
+python app.py --query "Which tickets mention billing problems?"
+python app.py --query "Summarize all high priority tickets"
+python app.py --query "What billing issues happened this week?"
 ```
 
-### Test the System
+**Help:**
+
+```bash
+python app.py --help           # Show all available commands
+```
+
+### Testing & Debugging
 
 ```bash
 # Run all tests
@@ -97,16 +106,26 @@ SEND_TEST_SLACK=true python checker.py slack
 
 ## How It Works
 
+**Pattern Detection Mode** (`python app.py --once` or `--monitor`):
+
 1. **Fetches** recent tickets from Zendesk API (last 24 hours)
 2. **Extracts** custom fields and metadata for enhanced analysis
-3. **Analyzes** tickets using OpenAI to identify patterns or answer queries
-4. **Alerts** via Slack when patterns are detected or query results are ready
+3. **Analyzes** tickets using OpenAI to identify similar issue patterns
+4. **Alerts** via Slack when groups of 5+ similar tickets are detected
 5. **Fallback** to sample data if Zendesk API is unavailable
+
+**Custom Query Mode** (`python app.py --query "..."`):
+
+1. **Extracts** time window from your query (if specified)
+2. **Fetches** relevant tickets based on time window or defaults to 24 hours
+3. **Analyzes** tickets using OpenAI to answer your specific question
+4. **Sends** formatted results and insights to Slack
+5. **Supports** natural language queries about trends, issues, and patterns
 
 ## Files
 
-- `app.py` - Main application with scheduler
-- `checker.py` - Unified testing and query tool
+- `app.py` - **Main application** with scheduler, pattern detection, and custom query analysis
+- `checker.py` - **Testing tool** for debugging and validating system components
 - `zendesk_client.py` - Zendesk API integration with custom field extraction
 - `ticket_analyzer.py` - OpenAI-powered analysis with unified JSON format
 - `slack_notifier.py` - Enhanced Slack webhook notifications
@@ -146,13 +165,24 @@ python app.py --once
 # → Sends Slack alert: "🚨 Alert: 7 Similar Support Tickets Detected"
 ```
 
+### Continuous Monitoring
+
+```bash
+# Monitor for patterns every hour
+python app.py --monitor
+# → Runs continuously, checking every hour for new patterns
+```
+
 ### Custom Analysis
 
 ```bash
 # Get insights about specific issues
-python checker.py query "How many tickets are related to SDK integration?"
+python app.py --query "How many tickets are related to SDK integration?"
 # → Returns: "Found 12 SDK-related tickets across iOS, Android, and Web platforms"
 
-python checker.py query "What are the top 3 most common issues this week?"
+python app.py --query "What are the top 3 most common issues this week?"
 # → Returns: Ranked list of issues with ticket counts and examples
+
+python app.py --query "Which organizations reported the most billing issues?"
+# → Returns: Analysis of billing issues by organization with counts
 ```

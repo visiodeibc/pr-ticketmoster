@@ -4,7 +4,8 @@ from datetime import datetime
 import json
 import os
 import logging
-from ticket_analyzer import analyze_similar_tickets
+import sys
+from ticket_analyzer import analyze_similar_tickets, analyze_tickets_with_query_and_timeframe
 from slack_notifier import send_slack_notification
 from zendesk_client import fetch_recent_tickets
 from constants import MIN_TICKETS_FOR_GROUP
@@ -95,6 +96,113 @@ def send_consolidated_alert(qualifying_groups, total_tickets):
         logger.error("✗ Failed to send consolidated alert")
         return False
 
+def analyze_with_custom_query(custom_query):
+    """Analyze tickets with a custom query and send results to Slack"""
+    logger.info(f"Running custom query: {custom_query}")
+    
+    # Use the query analysis function that handles time windows
+    parsed_data, summary, time_window_info = analyze_tickets_with_query_and_timeframe(None, custom_query)
+    
+    logger.info(f"Query completed. Time window used: {time_window_info}")
+    print(f"\n=== QUERY SUMMARY ===\n{summary}")
+    
+    if time_window_info:
+        print(f"\n=== TIME WINDOW INFO ===")
+        print(f"Description: {time_window_info.get('description', 'Unknown')}")
+        print(f"Hours: {time_window_info.get('hours', 'Unknown')}")
+        print(f"Has time reference: {time_window_info.get('has_time_reference', False)}")
+        print(f"Reasoning: {time_window_info.get('reasoning', 'No reasoning provided')}")
+    
+    # Extract groups from unified format
+    query_groups = []
+    total_tickets = 0
+    is_large_result_set = False
+    
+    if parsed_data and isinstance(parsed_data, dict):
+        response_type = parsed_data.get('response_type', 'unknown')
+        logger.info(f"Response type: {response_type}")
+        
+        is_large_result_set = parsed_data.get('large_result_set', False)
+        logger.info(f"Large result set: {is_large_result_set}")
+        
+        data = parsed_data.get('data', {})
+        logger.info(f"Data section keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
+        
+        if isinstance(data, dict):
+            # Handle new groups format
+            if 'groups' in data and data['groups']:
+                query_groups = data['groups']
+                # Use count field from OpenAI or fall back to counting tickets (avoid double-counting)
+                total_tickets = 0
+                for group in query_groups:
+                    # First try the count field from OpenAI
+                    group_count = group.get('count', 0)
+                    if group_count == 0:
+                        # Fallback: count from tickets array (detailed) or ticket_ids array (large result set)
+                        tickets_count = len(group.get('tickets', []))
+                        ticket_ids_count = len(group.get('ticket_ids', []))
+                        # Use the non-empty array (don't add both to avoid double-counting)
+                        group_count = tickets_count if tickets_count > 0 else ticket_ids_count
+                    total_tickets += group_count
+                logger.info(f"Extracted {len(query_groups)} groups with {total_tickets} total tickets from groups format")
+            
+            # Legacy fallback for old format  
+            elif 'tickets' in data or 'ticket_ids' in data:
+                logger.info("Using legacy format - converting to groups structure")
+                tickets = data.get('tickets', [])
+                ticket_ids = data.get('ticket_ids', [])
+                total_tickets = len(tickets) + len(ticket_ids)
+                
+                # Create a single group for legacy format
+                query_groups = [{
+                    'issue_type': 'Query Results',
+                    'tickets': tickets,
+                    'ticket_ids': ticket_ids,
+                    'count': total_tickets
+                }]
+                logger.info(f"Converted legacy format to 1 group with {total_tickets} tickets")
+            
+            logger.info(f"Final: {len(query_groups)} groups, {total_tickets} total tickets")
+    
+    # Send to Slack with unified groups format
+    if len(query_groups) == 1:
+        # Single group - send as individual group notification
+        single_group = query_groups[0]
+        
+        # For large result sets, convert ticket_ids to simple ticket format for backward compatibility
+        tickets_for_slack = single_group.get('tickets', [])
+        if is_large_result_set and not tickets_for_slack:
+            # Large result set: tickets array is empty, use ticket_ids
+            ticket_ids = single_group.get('ticket_ids', [])
+            tickets_for_slack = [{"ticket_id": tid} for tid in ticket_ids]
+        
+        slack_payload = {
+            "issue_type": f"Custom Query: {custom_query}",
+            "tickets": tickets_for_slack,
+            "summary": summary,
+            "parsed_data": parsed_data,
+            "time_window_info": time_window_info,
+            "is_large_result_set": is_large_result_set
+        }
+    else:
+        # Multiple groups - send as consolidated groups notification  
+        slack_payload = {
+            "issue_type": f"Custom Query: {custom_query}",
+            "groups": query_groups,
+            "total_tickets": total_tickets,
+            "summary": summary,
+            "parsed_data": parsed_data,
+            "time_window_info": time_window_info,
+            "is_large_result_set": is_large_result_set
+        }
+    
+    if send_slack_notification(slack_payload):
+        logger.info("✓ Custom query summary sent to Slack")
+        return True
+    else:
+        logger.error("✗ Failed to send custom query summary to Slack")
+        return False
+
 def check_for_alerts():
     """Main function to check for similar issues and send alerts"""
     logger.info("Checking for similar ticket patterns...")
@@ -135,9 +243,55 @@ def run_scheduler():
             logger.info("Stopped")
             break
 
+def show_help():
+    """Show usage instructions"""
+    print("""
+🤖 Zendesk Alert System
+
+Usage:
+    python app.py [command] [options]
+
+Commands:
+    --once          Run a single check for similar tickets (default)
+    --monitor       Run continuous monitoring with hourly checks
+    --query "text"  Analyze tickets with custom query and send to Slack
+    --help          Show this help message
+
+Examples:
+    python app.py                                    # Single check
+    python app.py --once                            # Single check  
+    python app.py --monitor                         # Continuous monitoring
+    python app.py --query "How many login issues?"  # Custom analysis
+    python app.py --query "What are the top SDK problems this week?"
+    
+Environment Variables:
+    ZENDESK_URL, ZENDESK_EMAIL, ZENDESK_TOKEN      # Required
+    OPENAI_API_KEY                                  # Required for AI analysis
+    SLACK_WEBHOOK_URL                               # Optional for notifications
+    TICKET_CNT_THRESHOLD                            # Alert threshold (default: 5)
+    """)
+
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) > 1 and sys.argv[1] == "--once":
-        run_once()
+    # Parse command line arguments
+    if len(sys.argv) > 1:
+        command = sys.argv[1]
+        
+        if command == "--help":
+            show_help()
+        elif command == "--monitor":
+            run_scheduler()
+        elif command == "--once":
+            run_once()
+        elif command == "--query":
+            if len(sys.argv) < 3:
+                logger.error("No query provided. Usage: python app.py --query 'your question here'")
+                sys.exit(1)
+            custom_query = " ".join(sys.argv[2:])
+            analyze_with_custom_query(custom_query)
+        else:
+            logger.error(f"Unknown command: {command}")
+            show_help()
+            sys.exit(1)
     else:
-        run_scheduler() 
+        # Default behavior: run once
+        run_once() 

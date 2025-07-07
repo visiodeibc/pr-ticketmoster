@@ -66,6 +66,7 @@ OPENAI_TIME_WINDOW_FORMAT = '''{{
     "hours": 24,
     "description": "last 24 hours"
   }},
+  "cleaned_query": "Query with time references removed for content analysis",
   "reasoning": "Brief explanation of why this time window was extracted"
 }}'''
 

@@ -236,7 +236,7 @@ def show_help():
 🧪 Zendesk Alert System - Testing Tool
 
 Usage:
-    python debug_checker.py [command]
+    python checker.py [command]
 
 Commands:
     env          Test environment variables
@@ -246,16 +246,16 @@ Commands:
     fields       Fetch and print all Zendesk ticket field definitions
     all          Run all tests (default)
     help         Show this help message
-    query        Run a custom query/analysis and send summary to Slack
 
 Environment Variables:
     SEND_TEST_SLACK=true    Enable Slack notification testing
     
 Examples:
-    python debug_checker.py                    # Run all tests
-    python debug_checker.py zendesk           # Test only Zendesk API
-    SEND_TEST_SLACK=true python debug_checker.py slack  # Test Slack notifications
-    python debug_checker.py query "How many login related tickets do we have?"  # Custom query
+    python checker.py                    # Run all tests
+    python checker.py zendesk           # Test only Zendesk API
+    SEND_TEST_SLACK=true python checker.py slack  # Test Slack notifications
+    
+Note: For custom queries, use: python app.py --query "your question here"
     """)
 
 if __name__ == "__main__":
@@ -276,116 +276,7 @@ if __name__ == "__main__":
         print_all_ticket_fields()
     elif command == "all":
         run_all_tests()
-    elif command == "query":
-        if len(sys.argv) < 3:
-            logger.error("No query provided. Usage: python debug_checker.py query 'your question here'")
-            sys.exit(1)
-        custom_query = " ".join(sys.argv[2:])
-        logger.info(f"Running custom query: {custom_query}")
-        
-        # Import the new function
-        from ticket_analyzer import analyze_tickets_with_query_and_timeframe
-        
-        # Use the new function that handles time windows
-        parsed_data, summary, time_window_info = analyze_tickets_with_query_and_timeframe(None, custom_query)
-        
-        logger.info(f"Query completed. Time window used: {time_window_info}")
-        print(f"\n=== QUERY SUMMARY ===\n{summary}")
-        
-        if time_window_info:
-            print(f"\n=== TIME WINDOW INFO ===")
-            print(f"Description: {time_window_info.get('description', 'Unknown')}")
-            print(f"Hours: {time_window_info.get('hours', 'Unknown')}")
-            print(f"Has time reference: {time_window_info.get('has_time_reference', False)}")
-            print(f"Reasoning: {time_window_info.get('reasoning', 'No reasoning provided')}")
-        
-        # Extract groups from unified format
-        query_groups = []
-        total_tickets = 0
-        is_large_result_set = False
-        
-        if parsed_data and isinstance(parsed_data, dict):
-            response_type = parsed_data.get('response_type', 'unknown')
-            logger.info(f"Response type: {response_type}")
-            
-            is_large_result_set = parsed_data.get('large_result_set', False)
-            logger.info(f"Large result set: {is_large_result_set}")
-            
-            data = parsed_data.get('data', {})
-            logger.info(f"Data section keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
-            
-            if isinstance(data, dict):
-                # Handle new groups format
-                if 'groups' in data and data['groups']:
-                    query_groups = data['groups']
-                    # Use count field from OpenAI or fall back to counting tickets (avoid double-counting)
-                    total_tickets = 0
-                    for group in query_groups:
-                        # First try the count field from OpenAI
-                        group_count = group.get('count', 0)
-                        if group_count == 0:
-                            # Fallback: count from tickets array (detailed) or ticket_ids array (large result set)
-                            tickets_count = len(group.get('tickets', []))
-                            ticket_ids_count = len(group.get('ticket_ids', []))
-                            # Use the non-empty array (don't add both to avoid double-counting)
-                            group_count = tickets_count if tickets_count > 0 else ticket_ids_count
-                        total_tickets += group_count
-                    logger.info(f"Extracted {len(query_groups)} groups with {total_tickets} total tickets from groups format")
-                
-                # Legacy fallback for old format  
-                elif 'tickets' in data or 'ticket_ids' in data:
-                    logger.info("Using legacy format - converting to groups structure")
-                    tickets = data.get('tickets', [])
-                    ticket_ids = data.get('ticket_ids', [])
-                    total_tickets = len(tickets) + len(ticket_ids)
-                    
-                    # Create a single group for legacy format
-                    query_groups = [{
-                        'issue_type': 'Query Results',
-                        'tickets': tickets,
-                        'ticket_ids': ticket_ids,
-                        'count': total_tickets
-                    }]
-                    logger.info(f"Converted legacy format to 1 group with {total_tickets} tickets")
-                
-                logger.info(f"Final: {len(query_groups)} groups, {total_tickets} total tickets")
-        
-        # Send to Slack with unified groups format
-        if len(query_groups) == 1:
-            # Single group - send as individual group notification
-            single_group = query_groups[0]
-            
-            # For large result sets, convert ticket_ids to simple ticket format for backward compatibility
-            tickets_for_slack = single_group.get('tickets', [])
-            if is_large_result_set and not tickets_for_slack:
-                # Large result set: tickets array is empty, use ticket_ids
-                ticket_ids = single_group.get('ticket_ids', [])
-                tickets_for_slack = [{"ticket_id": tid} for tid in ticket_ids]
-            
-            slack_payload = {
-                "issue_type": f"Custom Query: {custom_query}",
-                "tickets": tickets_for_slack,
-                "summary": summary,
-                "parsed_data": parsed_data,
-                "time_window_info": time_window_info,
-                "is_large_result_set": is_large_result_set
-            }
-        else:
-            # Multiple groups - send as consolidated groups notification  
-            slack_payload = {
-                "issue_type": f"Custom Query: {custom_query}",
-                "groups": query_groups,
-                "total_tickets": total_tickets,
-                "summary": summary,
-                "parsed_data": parsed_data,
-                "time_window_info": time_window_info,
-                "is_large_result_set": is_large_result_set
-            }
-        
-        if send_slack_notification(slack_payload):
-            logger.info("✓ Custom query summary sent to Slack")
-        else:
-            logger.error("✗ Failed to send custom query summary to Slack")
+
     else:
         logger.error(f"Unknown command: {command}")
         show_help()
