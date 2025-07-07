@@ -47,9 +47,19 @@ def call_openai_api(messages, max_tokens, analysis_type="analysis"):
     
     try:
         logger.info(f"Calling OpenAI API for {analysis_type}")
+        
+        # Add system message to enforce compact JSON formatting
+        enhanced_messages = []
+        for msg in messages:
+            if msg["role"] == "system":
+                enhanced_content = msg["content"] + " Always return compact JSON without formatting or newlines."
+                enhanced_messages.append({"role": "system", "content": enhanced_content})
+            else:
+                enhanced_messages.append(msg)
+        
         response = client.chat.completions.create(
             model=OPENAI_MODEL,
-            messages=messages,
+            messages=enhanced_messages,
             temperature=OPENAI_TEMPERATURE,
             max_tokens=max_tokens
         )
@@ -61,9 +71,11 @@ def call_openai_api(messages, max_tokens, analysis_type="analysis"):
         return None, False
 
 def parse_openai_response(response_text, expected_type="unknown"):
-    """Parse OpenAI response with unified error handling"""
+    """Parse OpenAI response with robust JSON handling"""
     try:
         cleaned = response_text.strip()
+        
+        # Remove markdown code blocks if present
         if cleaned.startswith("```"):
             cleaned = cleaned.strip('`').strip()
             if cleaned.lower().startswith("json"):
@@ -74,12 +86,45 @@ def parse_openai_response(response_text, expected_type="unknown"):
         cleaned = re.sub(r'/\*.*?\*/', '', cleaned, flags=re.DOTALL)
         cleaned = re.sub(r',(\s*[}\]])', r'\1', cleaned)
         
-        logger.info(f"Cleaned OpenAI response for JSON parsing: {cleaned[:200]}...")
+        # For pretty-formatted JSON, try to parse directly first
+        # If that fails, we'll do more aggressive cleaning below
+        try:
+            parsed = json.loads(cleaned)
+            logger.info(f"Successfully parsed {expected_type} response on first attempt")
+            return parsed, True
+        except json.JSONDecodeError:
+            logger.info(f"Initial parse failed, attempting aggressive cleaning for {expected_type}")
+        
+        # More aggressive cleaning for problematic responses
+        # Remove all unnecessary whitespace and newlines
+        cleaned = re.sub(r'\s+', ' ', cleaned)  # Replace all whitespace with single spaces
+        cleaned = cleaned.strip()
+        
+        # Fix common JSON formatting issues
+        cleaned = re.sub(r',\s*}', '}', cleaned)  # Remove trailing commas before }
+        cleaned = re.sub(r',\s*]', ']', cleaned)  # Remove trailing commas before ]
+        
+        logger.info(f"Attempting to parse cleaned compact JSON for {expected_type}")
         parsed = json.loads(cleaned)
-        logger.info(f"Successfully parsed {expected_type} response")
+        logger.info(f"Successfully parsed {expected_type} response after cleaning")
         return parsed, True
-    except Exception as e:
+        
+    except json.JSONDecodeError as e:
         logger.error(f"Failed to parse OpenAI response as JSON: {e}")
+        logger.error(f"JSON error at line {getattr(e, 'lineno', 'unknown')}, column {getattr(e, 'colno', 'unknown')}, position {getattr(e, 'pos', 'unknown')}")
+        
+        # Log problematic area for debugging
+        if hasattr(e, 'pos') and e.pos is not None and e.pos < len(response_text):
+            start = max(0, e.pos - 30)
+            end = min(len(response_text), e.pos + 30)
+            problem_area = response_text[start:end]
+            logger.error(f"Problem area: {repr(problem_area)}")
+        
+        logger.error(f"Raw response (first 300 chars): {response_text[:300]}...")
+        return None, False
+        
+    except Exception as e:
+        logger.error(f"Unexpected error parsing OpenAI response: {e}")
         logger.error(f"Raw response: {response_text[:200]}...")
         return None, False
 
@@ -105,11 +150,13 @@ def cluster_with_openai(tickets):
     Return your response as a JSON object with this exact structure:
     {OPENAI_CLUSTERING_FORMAT.format(total_tickets=len(tickets))}
     
-    IMPORTANT: 
+    CRITICAL FORMATTING REQUIREMENTS:
+    - Return ONLY compact JSON with NO pretty-printing, NO newlines, NO extra spaces
     - Only create groups with {MIN_TICKETS_FOR_GROUP}+ tickets that genuinely represent the same underlying issue
     - ticket_ids must be strings containing ONLY the numeric ID without any prefix or suffix
     - Update groups_found to the actual number of groups returned
-    - Return ONLY valid JSON without any comments, explanations, or additional text
+    - NO comments, explanations, markdown formatting, or additional text
+    - JSON must be valid and parseable in a single line
     
     Here are the tickets:
     {ticket_texts}
@@ -184,7 +231,7 @@ def analyze_tickets_with_query_and_timeframe(tickets, query, custom_timeframe=No
     Please answer the following question based on the tickets above:
     {cleaned_query}
 
-    IMPORTANT INSTRUCTIONS:
+    ANALYSIS INSTRUCTIONS:
     - Group your findings into logical issue categories (e.g., "Login Issues", "Billing Problems", etc.)
     - Each group should contain tickets that relate to the same underlying issue or topic
     - If your analysis finds more than {LARGE_RESULT_THRESHOLD} total relevant tickets, set "large_result_set" to true
@@ -205,7 +252,11 @@ def analyze_tickets_with_query_and_timeframe(tickets, query, custom_timeframe=No
     Return your response as a JSON object with this exact structure:
     {OPENAI_QUERY_FORMAT.format(total_tickets=len(tickets), query=query)}
     
-    CRITICAL: Return ONLY valid JSON without any comments, explanations, or additional text.
+    CRITICAL FORMATTING REQUIREMENTS:
+    - Return ONLY compact JSON with NO pretty-printing, NO newlines, NO extra spaces
+    - NO comments, explanations, markdown formatting, or additional text
+    - JSON must be valid and parseable in a single line
+    - Do not include any text before or after the JSON object
     """
     
     messages = [
@@ -288,11 +339,13 @@ def extract_time_window_and_clean_query(query):
     Return your response as a JSON object with this exact structure:
     {OPENAI_TIME_WINDOW_FORMAT}
     
-    IMPORTANT: 
+    CRITICAL FORMATTING REQUIREMENTS:
+    - Return ONLY compact JSON with NO pretty-printing, NO newlines, NO extra spaces
     - If the requested time window exceeds the maximum lookback ({MAX_LOOKBACK_HOURS} hours), cap it at the maximum
     - Be conservative with ambiguous time references
     - Ensure cleaned_query is meaningful and actionable for ticket analysis
-    - Return ONLY valid JSON without any comments, explanations, or additional text
+    - NO comments, explanations, markdown formatting, or additional text
+    - JSON must be valid and parseable in a single line
     """
     
     messages = [
