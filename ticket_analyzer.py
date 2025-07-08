@@ -188,7 +188,7 @@ def cluster_with_openai(tickets):
     if not success:
         return []
     
-    # Convert to legacy format for backwards compatibility
+    # Return groups in unified format with only ticket_ids
     groups = parsed_data.get("data", {}).get("groups", [])
     similar_groups = []
     
@@ -196,15 +196,17 @@ def cluster_with_openai(tickets):
         ticket_ids = group.get('ticket_ids', [])
         logger.info(f"Processing group '{group.get('issue_type')}' with {len(ticket_ids)} tickets")
         
-        matching_tickets = [t for t in tickets if str(t['id']) in ticket_ids]
+        # Validate ticket IDs exist in our dataset
+        valid_ticket_ids = [tid for tid in ticket_ids if any(str(t['id']) == str(tid) for t in tickets)]
         
-        if len(matching_tickets) >= MIN_TICKETS_FOR_GROUP:
+        if len(valid_ticket_ids) >= MIN_TICKETS_FOR_GROUP:
             ticket_group = {
                 'issue_type': group.get('issue_type'),
-                'tickets': matching_tickets
+                'ticket_ids': valid_ticket_ids,  # Use unified format with only IDs
+                'count': len(valid_ticket_ids)
             }
             similar_groups.append(ticket_group)
-            logger.info(f"Added group '{group.get('issue_type')}' with {len(matching_tickets)} tickets")
+            logger.info(f"Added group '{group.get('issue_type')}' with {len(valid_ticket_ids)} tickets")
         else:
             logger.info(f"Skipping group '{group.get('issue_type')}' as it has fewer than {MIN_TICKETS_FOR_GROUP} tickets")
     

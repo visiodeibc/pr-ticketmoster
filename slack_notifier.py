@@ -38,14 +38,26 @@ def truncate_ticket_list(ticket_links, max_length=SLACK_MAX_TEXT_LENGTH):
     
     return result.strip()
 
+def sanitize_text_for_slack(text):
+    """Sanitize text for safe inclusion in Slack messages"""
+    if not text:
+        return text
+    # Replace problematic characters that could break JSON or Slack formatting
+    sanitized = str(text)
+    sanitized = sanitized.replace('"', "'")  # Replace quotes with apostrophes
+    sanitized = sanitized.replace('\n', ' ')  # Replace newlines with spaces
+    sanitized = sanitized.replace('\r', ' ')  # Replace carriage returns with spaces
+    sanitized = sanitized.replace('\t', ' ')  # Replace tabs with spaces
+    return sanitized
+
 def get_ticket_data(ticket):
-    """Extract common ticket data fields"""
+    """Extract common ticket data fields with sanitization for Slack"""
     return {
         'id': ticket.get('id') or ticket.get('ticket_id'),
-        'subject': ticket.get('subject', 'No subject'),
-        'org_name': ticket.get('org_name', ''),
+        'subject': sanitize_text_for_slack(ticket.get('subject', 'No subject')),
+        'org_name': sanitize_text_for_slack(ticket.get('org_name', '')),
         'org_id': ticket.get('org_id', '') or ticket.get('numeric_org_id', ''),
-        'assignee': ticket.get('assignee', ''),
+        'assignee': sanitize_text_for_slack(ticket.get('assignee', '')),
         'jira_id': ticket.get('jira_id', ''),
         'jira_ticket_id': ticket.get('jira_ticket_id', ''),
         'discourse_link': ticket.get('link_to_discourse', '')
@@ -158,6 +170,10 @@ def generate_slack_title(ticket_group, ticket_count):
 
 def build_display_text(issue_type, summary, time_window_info, is_large_result_set, ticket_count, parsed_data):
     """Build the main display text for notifications"""
+    # Sanitize OpenAI-generated text that could contain problematic quotes
+    issue_type = sanitize_text_for_slack(issue_type)
+    summary = sanitize_text_for_slack(summary) if summary else issue_type
+    
     main_text = summary if summary else issue_type
     
     if issue_type.startswith('Custom Query:'):
@@ -246,7 +262,7 @@ def build_compact_groups_display(groups, total_tickets):
     """Build compact display for large result sets with multiple groups"""
     group_summaries = []
     for group in groups:
-        issue_type = group.get('issue_type', 'Unknown Issue')
+        issue_type = sanitize_text_for_slack(group.get('issue_type', 'Unknown Issue'))
         ticket_count = get_group_ticket_count(group)
         group_summaries.append(f"• *{issue_type}*: {ticket_count} tickets")
     
@@ -257,7 +273,7 @@ def build_detailed_groups_display(groups):
     group_displays = []
     
     for i, group in enumerate(groups, 1):
-        issue_type = group.get('issue_type', 'Unknown Issue')
+        issue_type = sanitize_text_for_slack(group.get('issue_type', 'Unknown Issue'))
         tickets = group.get('tickets', [])
         ticket_count = get_group_ticket_count(group)
         
@@ -280,6 +296,9 @@ def build_detailed_groups_display(groups):
 
 def build_single_group_detailed_display(tickets, issue_type):
     """Build detailed display for single group with bullet point formatting"""
+    # Sanitize OpenAI-generated issue type
+    issue_type = sanitize_text_for_slack(issue_type)
+    
     # Determine group header
     if issue_type.startswith('Custom Query:'):
         group_header = f"• *Query Results* ({len(tickets)} tickets)"
@@ -336,7 +355,7 @@ def send_consolidated_groups_notification(ticket_group, webhook_url):
     """Handle consolidated groups notification"""
     groups = ticket_group.get('groups', [])
     total_tickets = ticket_group.get('total_tickets', 0)
-    summary = ticket_group.get('summary', '')
+    summary = sanitize_text_for_slack(ticket_group.get('summary', ''))
     time_window_info = ticket_group.get('time_window_info', {})
     
     is_large_result_set = total_tickets > LARGE_RESULT_THRESHOLD
@@ -349,7 +368,7 @@ def send_consolidated_groups_notification(ticket_group, webhook_url):
         group_display = build_detailed_groups_display(groups)
     
     # Build main display text
-    issue_type = ticket_group.get('issue_type', '')
+    issue_type = sanitize_text_for_slack(ticket_group.get('issue_type', ''))
     if issue_type.startswith('Custom Query:'):
         query_text = issue_type.replace('Custom Query: ', '')
         display_text = f"*Query:* {query_text}\n\n*Summary:* {summary}"

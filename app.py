@@ -24,15 +24,16 @@ def enrich_clustering_groups_with_org_data(groups, original_tickets):
     
     for group in groups:
         enriched_group = group.copy()
+        
+        # Get ticket IDs from the unified format
+        ticket_ids = group.get('ticket_ids', [])
         enriched_tickets = []
         
-        for ticket in group.get('tickets', []):
-            ticket_id = str(ticket.get('id', ''))
-            if ticket_id in ticket_lookup:
-                enriched_tickets.append(ticket_lookup[ticket_id].copy())
-                logger.debug(f"Enriched clustering ticket #{ticket_id} with org_id: {ticket_lookup[ticket_id].get('numeric_org_id', 'N/A')}")
+        for ticket_id in ticket_ids:
+            if str(ticket_id) in ticket_lookup:
+                enriched_tickets.append(ticket_lookup[str(ticket_id)].copy())
+                logger.debug(f"Enriched clustering ticket #{ticket_id} with org_id: {ticket_lookup[str(ticket_id)].get('numeric_org_id', 'N/A')}")
             else:
-                enriched_tickets.append(ticket)
                 logger.warning(f"Could not find original data for clustering ticket #{ticket_id}")
         
         enriched_group['tickets'] = enriched_tickets
