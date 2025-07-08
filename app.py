@@ -139,31 +139,27 @@ def analyze_with_custom_query(custom_query):
             # Handle new groups format
             if 'groups' in data and data['groups']:
                 query_groups = data['groups']
-                # Use count field from OpenAI or fall back to counting tickets (avoid double-counting)
+                # Use count field from OpenAI or fall back to counting ticket IDs
                 total_tickets = 0
                 for group in query_groups:
                     # First try the count field from OpenAI
                     group_count = group.get('count', 0)
                     if group_count == 0:
-                        # Fallback: count from tickets array (detailed) or ticket_ids array (large result set)
-                        tickets_count = len(group.get('tickets', []))
+                        # Fallback: count from ticket_ids array
                         ticket_ids_count = len(group.get('ticket_ids', []))
-                        # Use the non-empty array (don't add both to avoid double-counting)
-                        group_count = tickets_count if tickets_count > 0 else ticket_ids_count
+                        group_count = ticket_ids_count
                     total_tickets += group_count
                 logger.info(f"Extracted {len(query_groups)} groups with {total_tickets} total tickets from groups format")
             
             # Legacy fallback for old format  
-            elif 'tickets' in data or 'ticket_ids' in data:
+            elif 'ticket_ids' in data:
                 logger.info("Using legacy format - converting to groups structure")
-                tickets = data.get('tickets', [])
                 ticket_ids = data.get('ticket_ids', [])
-                total_tickets = len(tickets) + len(ticket_ids)
+                total_tickets = len(ticket_ids)
                 
                 # Create a single group for legacy format
                 query_groups = [{
                     'issue_type': 'Query Results',
-                    'tickets': tickets,
                     'ticket_ids': ticket_ids,
                     'count': total_tickets
                 }]
@@ -184,26 +180,77 @@ def analyze_with_custom_query(custom_query):
         # Single group - send as individual group notification
         single_group = query_groups[0]
         
-        # For large result sets, convert ticket_ids to simple ticket format for backward compatibility
-        tickets_for_slack = single_group.get('tickets', [])
-        if is_large_result_set and not tickets_for_slack:
-            # Large result set: tickets array is empty, use ticket_ids
-            ticket_ids = single_group.get('ticket_ids', [])
-            tickets_for_slack = [{"ticket_id": tid} for tid in ticket_ids]
+        # Always convert ticket_ids to enriched ticket format since OpenAI only returns IDs
+        ticket_ids = single_group.get('ticket_ids', [])
+        if ticket_ids:
+            # Get the original tickets used for analysis to enrich the response
+            from ticket_analyzer import get_tickets_for_timeframe
+            analysis_tickets = get_tickets_for_timeframe(None, time_window_info, None)
+            ticket_lookup = {str(ticket['id']): ticket for ticket in analysis_tickets}
+            
+            # Create enriched ticket objects for Slack display
+            enriched_tickets = []
+            for ticket_id in ticket_ids:
+                if str(ticket_id) in ticket_lookup:
+                    original_ticket = ticket_lookup[str(ticket_id)]
+                    enriched_ticket = {
+                        "id": ticket_id,
+                        "subject": original_ticket.get('subject', ''),
+                        "org_id": original_ticket.get('numeric_org_id', ''),
+                        "assignee": original_ticket.get('assignee', ''),
+                        "jira_id": original_ticket.get('jira_id', ''),
+                        "jira_ticket_id": original_ticket.get('jira_ticket_id', ''),
+                        "link_to_discourse": original_ticket.get('link_to_discourse', '')
+                    }
+                    enriched_tickets.append(enriched_ticket)
+        else:
+            enriched_tickets = []
         
         slack_payload = {
             "issue_type": f"Custom Query: {custom_query}",
-            "tickets": tickets_for_slack,
+            "tickets": enriched_tickets,
             "summary": summary,
             "parsed_data": parsed_data,
             "time_window_info": time_window_info,
             "is_large_result_set": is_large_result_set
         }
     else:
-        # Multiple groups - send as consolidated groups notification  
+        # Multiple groups - send as consolidated groups notification
+        # Enrich all groups with original ticket data
+        if query_groups:
+            from ticket_analyzer import get_tickets_for_timeframe
+            analysis_tickets = get_tickets_for_timeframe(None, time_window_info, None)
+            ticket_lookup = {str(ticket['id']): ticket for ticket in analysis_tickets}
+            
+            enriched_groups = []
+            for group in query_groups:
+                enriched_group = group.copy()
+                ticket_ids = group.get('ticket_ids', [])
+                
+                # Create enriched ticket objects for this group
+                enriched_tickets = []
+                for ticket_id in ticket_ids:
+                    if str(ticket_id) in ticket_lookup:
+                        original_ticket = ticket_lookup[str(ticket_id)]
+                        enriched_ticket = {
+                            "id": ticket_id,
+                            "subject": original_ticket.get('subject', ''),
+                            "org_id": original_ticket.get('numeric_org_id', ''),
+                            "assignee": original_ticket.get('assignee', ''),
+                            "jira_id": original_ticket.get('jira_id', ''),
+                            "jira_ticket_id": original_ticket.get('jira_ticket_id', ''),
+                            "link_to_discourse": original_ticket.get('link_to_discourse', '')
+                        }
+                        enriched_tickets.append(enriched_ticket)
+                
+                enriched_group['tickets'] = enriched_tickets
+                enriched_groups.append(enriched_group)
+        else:
+            enriched_groups = query_groups
+        
         slack_payload = {
             "issue_type": f"Custom Query: {custom_query}",
-            "groups": query_groups,
+            "groups": enriched_groups,
             "total_tickets": total_tickets,
             "summary": summary,
             "parsed_data": parsed_data,

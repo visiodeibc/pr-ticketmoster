@@ -143,9 +143,20 @@ def cluster_with_openai(tickets):
     logger.info(f"Prepared {len(ticket_texts)} ticket texts for OpenAI analysis")
     
     prompt = f"""
-    I have a set of technical support tickets. 
+    I have a set of Amplitude customer support tickets from various product analytics implementations.
     
-    Please analyze them and identify groups of tickets that are about the same or very similar issues.
+    As an Amplitude product analytics expert with access to current Amplitude documentation (docs.amplitude.com) and knowledge base, analyze these tickets and identify groups that represent the same underlying technical or product analytics issues.
+    
+    Leverage your knowledge of Amplitude's current product suite, common implementation patterns, and known customer pain points as documented in Amplitude's help center and documentation. Group tickets by their underlying root cause, not just surface-level symptoms.
+    
+    Consider the full spectrum of Amplitude products and integrations, including but not limited to issues related to:
+    - Product implementation and configuration challenges
+    - Data collection and integration problems
+    - Analytics and reporting difficulties  
+    - Platform performance and infrastructure issues
+    - Account management and access problems
+    
+    Use your expertise to identify patterns that indicate systemic product issues versus individual customer configuration problems.
     
     Return your response as a JSON object with this exact structure:
     {OPENAI_CLUSTERING_FORMAT.format(total_tickets=len(tickets))}
@@ -154,6 +165,7 @@ def cluster_with_openai(tickets):
     - Return ONLY compact JSON with NO pretty-printing, NO newlines, NO extra spaces
     - Only create groups with {MIN_TICKETS_FOR_GROUP}+ tickets that genuinely represent the same underlying issue
     - ticket_ids must be strings containing ONLY the numeric ID without any prefix or suffix
+    - IMPORTANT: Only include ticket IDs in "ticket_ids" array
     - Update groups_found to the actual number of groups returned
     - Set "large_result_set" to true ONLY if creating groups with total tickets > {LARGE_RESULT_THRESHOLD}
     - NO comments, explanations, markdown formatting, or additional text
@@ -224,32 +236,28 @@ def analyze_tickets_with_query_and_timeframe(tickets, query, custom_timeframe=No
     time_context = f"These tickets were collected from the {time_window_info.get('description', 'last 24 hours')}."
     
     prompt = f"""
-    You are a technical support analyst. Here is a list of support tickets:
+    You are analyzing Amplitude customer support tickets as a senior product analytics expert. Here is a list of support tickets from Amplitude customers across various industries and product types:
     {ticket_texts}
 
     {time_context}
 
-    Please answer the following question based on the tickets above:
+    Please answer the following question based on the tickets above, leveraging your deep knowledge of Amplitude's product analytics platform:
     {cleaned_query}
 
     ANALYSIS INSTRUCTIONS:
-    - Group your findings into logical issue categories (e.g., "Login Issues", "Billing Problems", etc.)
-    - Each group should contain tickets that relate to the same underlying issue or topic
+    - Apply your comprehensive knowledge of Amplitude's current product suite (as documented in docs.amplitude.com) to group findings into meaningful categories
+    - Reference your understanding of Amplitude's product documentation and help center to identify which product areas and features are affected
+    - Use your expertise in Amplitude's ecosystem to identify patterns that indicate systemic issues vs. individual configuration problems
+    - Each group should contain tickets that relate to the same underlying product analytics issue or workflow based on current Amplitude product architecture
+    - Consider customer implementation patterns and common challenges as documented in Amplitude's knowledge base
     - CRITICAL: Set "large_result_set" to true ONLY if total relevant tickets > {LARGE_RESULT_THRESHOLD} (more than {LARGE_RESULT_THRESHOLD})
     - CRITICAL: Set "large_result_set" to false if total relevant tickets ≤ {LARGE_RESULT_THRESHOLD} (equal to or less than {LARGE_RESULT_THRESHOLD})
-    - For large result sets (total > {LARGE_RESULT_THRESHOLD}):
-      * Only provide ticket IDs in the "ticket_ids" array (no detailed ticket objects)
-      * Keep the "tickets" array empty for each group
-      * Focus on concise group summaries
-    - For smaller result sets (total ≤ {LARGE_RESULT_THRESHOLD}):
-      * Set "large_result_set" to false
-      * Include detailed ticket objects in the "tickets" array for each group
-      * Also include ticket IDs in the "ticket_ids" array for each group
+    - Only provide ticket IDs in the "ticket_ids" array for each group
     - Always update "count" for each group to reflect the actual number of tickets in that group
     - Update "total_tickets" to reflect the sum of all relevant tickets across all groups
     - In your summary, always use ACTUAL COUNTS of tickets found, not threshold numbers
-    - Make summary concise but informative, mentioning the number of groups and total tickets
-    - Consider the time window context in your analysis
+    - Make summary concise but informative, mentioning the number of groups and total tickets with relevant product context
+    - Consider the time window context in your analysis and any potential correlation with recent product updates or feature releases
 
     Return your response as a JSON object with this exact structure:
     {OPENAI_QUERY_FORMAT.format(total_tickets=len(tickets), query=query)}
@@ -351,7 +359,7 @@ def extract_time_window_and_clean_query(query):
     """
     
     messages = [
-        {"role": "system", "content": "You are an expert at understanding time references in natural language queries."},
+        {"role": "system", "content": "You are an expert Amplitude product analytics professional with comprehensive knowledge of Amplitude's documentation and customer support patterns. You understand time-sensitive analytics queries and how they relate to current Amplitude product workflows."},
         {"role": "user", "content": prompt}
     ]
     

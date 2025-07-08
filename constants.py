@@ -7,16 +7,6 @@ OPENAI_CLUSTERING_FORMAT = '''{{
     "groups": [
       {{
         "issue_type": "Descriptive name for the issue or answer category",
-        "tickets": [
-          {{
-            "ticket_id": "123",
-            "subject": "Ticket subject", 
-            "description": "Brief description or key details",
-            "org_id": "12345",
-            "org_name": "Organization Name",
-            "assignee": "Support Agent Name"
-          }}
-        ],
         "ticket_ids": ["123", "456", "789"],
         "count": 3
       }}
@@ -37,16 +27,6 @@ OPENAI_QUERY_FORMAT = '''{{
     "groups": [
       {{
         "issue_type": "Descriptive name for the issue or answer category",
-        "tickets": [
-          {{
-            "ticket_id": "123",
-            "subject": "Ticket subject", 
-            "description": "Brief description or key details",
-            "org_id": "12345",
-            "org_name": "Organization Name",
-            "assignee": "Support Agent Name"
-          }}
-        ],
         "ticket_ids": ["123", "456", "789"],
         "count": 3
       }}
@@ -75,7 +55,7 @@ OPENAI_MODEL = "gpt-4.1-2025-04-14"
 OPENAI_TEMPERATURE = 0.2
 OPENAI_MAX_TOKENS_CLUSTERING = 20000
 OPENAI_MAX_TOKENS_QUERY = 20000
-SYSTEM_MESSAGE = "You are a technical support analyst who specializes in analyzing customer support tickets."
+SYSTEM_MESSAGE = "You are a senior Amplitude product analytics professional with comprehensive knowledge of Amplitude's full product suite and ecosystem. You stay current with Amplitude's product documentation (docs.amplitude.com), help center, and knowledge base to understand all current products, features, integrations, and common customer implementation patterns. You can identify support ticket patterns across all Amplitude products and integrations, understanding both technical implementation challenges and business use case requirements across different industries and product types."
 
 # Slack Configuration
 SLACK_MAX_TEXT_LENGTH = 3000
