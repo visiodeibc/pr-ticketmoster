@@ -98,6 +98,12 @@ def send_consolidated_alert(qualifying_groups, total_tickets):
 
 def analyze_with_custom_query(custom_query):
     """Analyze tickets with a custom query and send results to Slack"""
+    # Sanitize query input - remove problematic characters that could break JSON parsing
+    custom_query = custom_query.strip()
+    if custom_query.endswith('{') or custom_query.endswith('}'):
+        custom_query = custom_query.rstrip('{}').strip()
+        logger.info(f"Sanitized query by removing trailing braces: {custom_query}")
+    
     logger.info(f"Running custom query: {custom_query}")
     
     # Use the query analysis function that handles time windows
@@ -122,8 +128,9 @@ def analyze_with_custom_query(custom_query):
         response_type = parsed_data.get('response_type', 'unknown')
         logger.info(f"Response type: {response_type}")
         
-        is_large_result_set = parsed_data.get('large_result_set', False)
-        logger.info(f"Large result set: {is_large_result_set}")
+        # Get OpenAI's suggestion but enforce our own logic
+        openai_large_result_set = parsed_data.get('large_result_set', False)
+        logger.info(f"OpenAI suggested large result set: {openai_large_result_set}")
         
         data = parsed_data.get('data', {})
         logger.info(f"Data section keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
@@ -161,6 +168,14 @@ def analyze_with_custom_query(custom_query):
                     'count': total_tickets
                 }]
                 logger.info(f"Converted legacy format to 1 group with {total_tickets} tickets")
+            
+            # Override OpenAI's large_result_set decision with our own logic
+            from constants import LARGE_RESULT_THRESHOLD
+            is_large_result_set = total_tickets > LARGE_RESULT_THRESHOLD
+            if is_large_result_set != openai_large_result_set:
+                logger.info(f"Overriding OpenAI large_result_set ({openai_large_result_set}) with our logic ({is_large_result_set}) based on {total_tickets} tickets vs {LARGE_RESULT_THRESHOLD} threshold")
+            else:
+                logger.info(f"OpenAI large_result_set decision matches our logic: {is_large_result_set}")
             
             logger.info(f"Final: {len(query_groups)} groups, {total_tickets} total tickets")
     

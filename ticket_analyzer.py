@@ -155,6 +155,7 @@ def cluster_with_openai(tickets):
     - Only create groups with {MIN_TICKETS_FOR_GROUP}+ tickets that genuinely represent the same underlying issue
     - ticket_ids must be strings containing ONLY the numeric ID without any prefix or suffix
     - Update groups_found to the actual number of groups returned
+    - Set "large_result_set" to true ONLY if creating groups with total tickets > {LARGE_RESULT_THRESHOLD}
     - NO comments, explanations, markdown formatting, or additional text
     - JSON must be valid and parseable in a single line
     
@@ -207,16 +208,16 @@ def analyze_tickets_with_query_and_timeframe(tickets, query, custom_timeframe=No
     time_window_info = custom_timeframe or extract_time_window_and_clean_query(query)
     logger.info(f"Using time window: {time_window_info}")
     
+    # Extract cleaned query from time window info
+    cleaned_query = time_window_info.get("cleaned_query", query)
+    
     # Fetch tickets based on time window
     tickets = get_tickets_for_timeframe(tickets, time_window_info, custom_timeframe)
     if not tickets:
         logger.info("No tickets found for analysis with query")
         return None, "No tickets found for the specified time window.", time_window_info
     
-    logger.info(f"Analyzing {len(tickets)} tickets with custom query: {query}")
-    
-    # Use cleaned query from OpenAI (more accurate than regex)
-    cleaned_query = time_window_info.get("cleaned_query", query)
+    logger.info(f"Analyzing {len(tickets)} tickets with custom query: {cleaned_query}")
     
     # Prepare data and make API call
     ticket_texts = prepare_ticket_texts(tickets)
@@ -234,12 +235,13 @@ def analyze_tickets_with_query_and_timeframe(tickets, query, custom_timeframe=No
     ANALYSIS INSTRUCTIONS:
     - Group your findings into logical issue categories (e.g., "Login Issues", "Billing Problems", etc.)
     - Each group should contain tickets that relate to the same underlying issue or topic
-    - If your analysis finds more than {LARGE_RESULT_THRESHOLD} total relevant tickets, set "large_result_set" to true
-    - For large result sets (>{LARGE_RESULT_THRESHOLD} total tickets):
+    - CRITICAL: Set "large_result_set" to true ONLY if total relevant tickets > {LARGE_RESULT_THRESHOLD} (more than {LARGE_RESULT_THRESHOLD})
+    - CRITICAL: Set "large_result_set" to false if total relevant tickets ≤ {LARGE_RESULT_THRESHOLD} (equal to or less than {LARGE_RESULT_THRESHOLD})
+    - For large result sets (total > {LARGE_RESULT_THRESHOLD}):
       * Only provide ticket IDs in the "ticket_ids" array (no detailed ticket objects)
       * Keep the "tickets" array empty for each group
       * Focus on concise group summaries
-    - For smaller result sets (≤{LARGE_RESULT_THRESHOLD} total tickets):
+    - For smaller result sets (total ≤ {LARGE_RESULT_THRESHOLD}):
       * Set "large_result_set" to false
       * Include detailed ticket objects in the "tickets" array for each group
       * Also include ticket IDs in the "ticket_ids" array for each group
